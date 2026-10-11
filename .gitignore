@@ -1,0 +1,16 @@
+*.log
+*.tmp
+*~
+*.bak
+.env
+*.env
+.env.*
+*.local
+/target/
+**/*.rs.bk
+debug/
+target/debug/
+target/release/
+build/
+build_output/
+logs/
