@@ -1,0 +1,70 @@
+[package]
+name = "GameToaster"
+version = "1.0.0"
+edition = "2021"
+build = "build.rs"
+default-run = "GameToaster"
+
+[features]
+default = []
+
+[dependencies]
+configparser = "=3.2.0"
+eframe = { version = "=0.34.3", default-features = false, features = ["default_fonts", "glow"] }
+egui-phosphor = { version = "=0.12.0", default-features = false, features = ["regular"] }
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+log = "=0.4.33"
+getrandom = "=0.4.3"
+md-5 = "=0.11.0"
+rfd = { version = "=0.17.2", default-features = false, features = ["common-controls-v6"] }
+tray-icon = { version = "=0.24.1", default-features = false, features = ["common-controls-v6"] }
+rust-i18n = "3.1"
+semver = { version = "=1.0.28", features = ["serde"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+sha2 = "=0.11.0"
+toml = "=0.8.23"
+windows-hotkeys = { version = "=0.2.1", default-features = false }
+zip = { version = "=6.0.0", default-features = false, features = ["deflate-flate2"] }
+windows = { version = "0.58", features = [
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Communication",
+    "Win32_Devices_HumanInterfaceDevice",
+    "Win32_Devices_Display",
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_IO",
+    "Win32_System_JobObjects",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_SystemInformation",
+    "Win32_System_Registry",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
+    "Win32_Globalization",
+    "Win32_UI_Shell",
+    "Win32_System_Com",
+    "Win32_Storage_Packaging_Appx",
+    "ApplicationModel",
+    "ApplicationModel_Activation",
+    "Foundation",
+    "Storage",
+] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[build-dependencies]
+embed-resource = "3"
+
+[[bin]]
+name = "GameToaster"
+path = "src/main.rs"
+
+[workspace]

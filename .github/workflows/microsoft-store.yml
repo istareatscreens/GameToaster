@@ -1,0 +1,163 @@
+name: Microsoft Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to package and submit, for example v1.0.0.0 (push it first)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: microsoft-store
+  cancel-in-progress: false
+
+env:
+  RUST_TOOLCHAIN: "1.97.1"
+
+jobs:
+  version:
+    name: Check the tag
+    runs-on: windows-2025
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      commit: ${{ steps.tag.outputs.commit }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag against Cargo.toml
+        id: tag
+        uses: ./.github/actions/tag-version
+        with:
+          tag: ${{ inputs.tag }}
+
+  tests:
+    name: Tests
+    needs: version
+    uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ needs.version.outputs.commit }}
+
+  package:
+    name: Build and package
+    needs: [version, tests]
+    runs-on: windows-2025
+    timeout-minutes: 60
+    outputs:
+      package: ${{ steps.describe.outputs.package }}
+      store-id: ${{ steps.describe.outputs.store-id }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+          persist-credentials: false
+
+      - name: Describe the package
+        id: describe
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $json = pwsh -NoProfile -File packaging/msix/package.ps1 -Describe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $description = $json | ConvertFrom-Json
+          if ($description.msixVersion -cne $env:VERSION) {
+            Write-Output "::error::The package version would be $($description.msixVersion), but the tag's version is $env:VERSION."
+            exit 1
+          }
+          "package=$($description.package)" >> $env:GITHUB_OUTPUT
+          "store-id=$($description.storeId)" >> $env:GITHUB_OUTPUT
+
+      - name: Install the Rust toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup override set $env:RUST_TOOLCHAIN
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustc --version
+
+      - name: Build
+        shell: cmd
+        run: build.bat
+
+      - name: Package
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File packaging/msix/package.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Keep the package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: GameToaster-msix
+          path: build_output/${{ steps.describe.outputs.package }}
+          if-no-files-found: error
+
+  publish:
+    name: Submit to the Microsoft Store
+    needs: package
+    runs-on: windows-2025
+    timeout-minutes: 30
+    environment: microsoft-store
+    steps:
+      - name: Fetch the package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: GameToaster-msix
+          path: package
+
+      - name: Check the Store credentials
+        shell: pwsh
+        env:
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: |
+          $problems = @()
+          foreach ($name in 'AZURE_AD_TENANT_ID', 'AZURE_AD_APPLICATION_CLIENT_ID', 'AZURE_AD_APPLICATION_SECRET', 'SELLER_ID') {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { $problems += "$name is not set" }
+          }
+          $parsed = [guid]::Empty
+          foreach ($name in 'AZURE_AD_TENANT_ID', 'AZURE_AD_APPLICATION_CLIENT_ID') {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ($value -and -not [guid]::TryParse($value, [ref] $parsed)) { $problems += "$name is not a GUID" }
+          }
+          if ($env:SELLER_ID -and $env:SELLER_ID -notmatch '^\d+$') { $problems += 'SELLER_ID is not numeric' }
+          foreach ($problem in $problems) { Write-Output "::error::$problem" }
+          if ($problems.Count -gt 0) { exit 1 }
+
+      - name: Install the Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0
+        with:
+          version: v0.4.3
+
+      - name: Sign in to Partner Center
+        shell: pwsh
+        env:
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: |
+          msstore reconfigure --tenantId $env:AZURE_AD_TENANT_ID --sellerId $env:SELLER_ID --clientId $env:AZURE_AD_APPLICATION_CLIENT_ID --clientSecret $env:AZURE_AD_APPLICATION_SECRET
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Submit the package
+        shell: pwsh
+        env:
+          PACKAGE: ${{ needs.package.outputs.package }}
+          STORE_ID: ${{ needs.package.outputs.store-id }}
+        run: |
+          msstore publish (Join-Path $env:GITHUB_WORKSPACE "package/$env:PACKAGE") --appId $env:STORE_ID
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

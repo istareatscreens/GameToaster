@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit to test; empty tests the commit the run started from.
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.97.1"
+
+jobs:
+  test:
+    name: Run the tests
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Install the Rust toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup override set $env:RUST_TOOLCHAIN
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustc --version
+
+      - name: Test
+        shell: cmd
+        run: test.bat

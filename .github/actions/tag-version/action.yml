@@ -1,0 +1,74 @@
+name: Tag version
+description: Checks that a release tag v<major>.<minor>.<patch>.0 exists and matches Cargo.toml at its commit.
+
+inputs:
+  tag:
+    description: The release tag, for example v1.0.0.0.
+    required: true
+
+outputs:
+  tag:
+    description: The release tag, for example v1.0.0.0.
+    value: ${{ steps.check.outputs.tag }}
+  version:
+    description: The release version in the Microsoft Store's form, for example 1.0.0.0.
+    value: ${{ steps.check.outputs.version }}
+  cargo-version:
+    description: The Cargo.toml package version, for example 1.0.0.
+    value: ${{ steps.check.outputs.cargo-version }}
+  commit:
+    description: The commit the tag names.
+    value: ${{ steps.check.outputs.commit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check the tag against Cargo.toml
+      id: check
+      shell: pwsh
+      env:
+        TAG: ${{ inputs.tag }}
+      run: |
+        $tag = $env:TAG
+        if ($tag -cnotmatch '^v(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.0$') {
+          Write-Output "::error::'$tag' is not a release tag. Release tags are v<major>.<minor>.<patch>.0, the Microsoft Store's version form, for example v1.0.0.0."
+          exit 1
+        }
+        $parts = @([int] $Matches[1], [int] $Matches[2], [int] $Matches[3])
+        if ($parts[0] -lt 1 -or @($parts | Where-Object { $_ -gt 65535 }).Count -gt 0) {
+          Write-Output "::error::Tag '$tag' is not a Microsoft Store version: each part is 0 to 65535 and the first is at least 1."
+          exit 1
+        }
+        $tagged = '{0}.{1}.{2}' -f $parts[0], $parts[1], $parts[2]
+        $commit = git rev-parse --verify --quiet "refs/tags/$tag^{commit}"
+        if ($LASTEXITCODE -ne 0 -or -not $commit) {
+          Write-Output "::error::Tag '$tag' does not exist in this repository. Push it first: git push origin $tag"
+          exit 1
+        }
+        $tree = Join-Path $env:RUNNER_TEMP 'tagged'
+        git worktree add --detach --quiet $tree $commit
+        if ($LASTEXITCODE -ne 0) {
+          Write-Output "::error::The commit of tag '$tag' ($commit) could not be checked out."
+          exit 1
+        }
+        $metadata = cargo metadata --no-deps --offline --format-version 1 --manifest-path (Join-Path $tree 'Cargo.toml')
+        if ($LASTEXITCODE -ne 0) {
+          Write-Output "::error::cargo metadata could not read Cargo.toml at tag '$tag'."
+          exit 1
+        }
+        $packages = @(($metadata | ConvertFrom-Json).packages)
+        if ($packages.Count -ne 1) {
+          Write-Output "::error::Cargo.toml at tag '$tag' describes $($packages.Count) packages; expected one."
+          exit 1
+        }
+        $cargoVersion = [string] $packages[0].version
+        if ($cargoVersion -cne $tagged) {
+          Write-Output "::error::Tag '$tag' is version $tagged.0, but Cargo.toml at its commit is version $cargoVersion. Tag the commit whose Cargo.toml version is $tagged."
+          exit 1
+        }
+        Write-Output "Tag $tag names $commit, whose Cargo.toml version is $cargoVersion; the release version is $tagged.0."
+        "tag=$tag" >> $env:GITHUB_OUTPUT
+        "version=$tagged.0" >> $env:GITHUB_OUTPUT
+        "cargo-version=$cargoVersion" >> $env:GITHUB_OUTPUT
+        "commit=$commit" >> $env:GITHUB_OUTPUT
+        exit 0
