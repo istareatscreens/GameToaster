@@ -65,7 +65,7 @@ fn a_junction_and_its_target_name_one_file_though_their_spellings_differ() {
     std::fs::write(target.join("run.exe"), b"MZ").unwrap();
     std::fs::write(target.join("other.exe"), b"MZ").unwrap();
     let junction = root.path().join("junction");
-    let made = std::process::Command::new(crate::support::process::interpreter::comspec())
+    let made = std::process::Command::new(crate::support::process::interpreter::comspec().unwrap())
         .args(["/d", "/c", "mklink", "/J"])
         .arg(&junction)
         .arg(&target)

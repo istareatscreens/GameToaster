@@ -362,8 +362,9 @@ impl RecoveryReceipt {
             plugin_version: self.plugin_version.clone(),
             revision_sha256: self.revision_sha256.clone(),
             game_id: self.game_id,
-            game_folder: PathBuf::from(r"C:\receipt-validation"),
-            selected_target: PathBuf::from(r"C:\receipt-validation\game.exe"),
+
+            game_folder: PathBuf::from(r"\\?\receipt-validation"),
+            selected_target: PathBuf::from(r"\\?\receipt-validation\game.exe"),
             resolved_launcher: None,
             resolved_watch_target: None,
             state: AssignmentState::Active,

@@ -92,7 +92,7 @@ fn job_shutdown_terminates_root_child_and_grandchild() {
 
 #[test]
 fn natural_exit_is_reported_by_job_completion_port() {
-    let command = comspec();
+    let command = comspec().unwrap();
     if !command.is_file() {
         return;
     }
@@ -135,7 +135,7 @@ fn a_spawned_process_reports_when_it_was_created() {
         .spawn(
             GameId(7),
             &SpawnSpec {
-                executable: comspec(),
+                executable: comspec().unwrap(),
                 working_directory: dir.path().to_path_buf(),
                 arguments: vec!["/d".into(), "/c".into(), "ping -n 20 127.0.0.1 >nul".into()],
                 console: ConsolePlan {

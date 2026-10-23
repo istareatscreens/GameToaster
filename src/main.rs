@@ -31,7 +31,15 @@ fn run(args: &[std::ffi::OsString]) -> Result<(), String> {
     set_per_monitor_v2_dpi_awareness();
     let install_kind = launcher_gui::platform::package::InstallKind::current()?;
     let launcher_dir = launcher_gui::platform::storage::state_root(install_kind)?;
-    let log = LauncherLog::open(&launcher_dir)?;
+
+    let log = LauncherLog::open(&launcher_dir).map_err(|failure| {
+        launcher_gui::startup_failure::state_folder_message(
+            install_kind,
+            &launcher_dir,
+            &failure.error,
+        )
+        .unwrap_or_else(|| failure.to_string())
+    })?;
 
     launcher_gui::i18n::apply("en");
     let opened = launcher_gui::config::open(&launcher_dir);
@@ -44,6 +52,13 @@ fn run(args: &[std::ffi::OsString]) -> Result<(), String> {
     })?;
     let config = opened.config;
     log.set_enabled(config.settings.diagnostics_logging);
+
+    if let Err(error) = launcher_gui::platform::startup::repair_entry() {
+        log.event(
+            "startup-entry",
+            &[("result", "not repaired".into()), ("error", error)],
+        );
+    }
 
     let start_in_tray = launcher_gui::platform::startup::launched_at_sign_in(args);
     launcher_gui::run(launcher_dir, config, opened.notice, log, start_in_tray)

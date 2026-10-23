@@ -12,7 +12,7 @@ pub fn open_config_target(target: &Path) -> Result<(), String> {
     }
     if is_script(target) || has_extension(target, "exe") {
         let mut command = if is_script(target) {
-            let mut command = Command::new(crate::support::process::interpreter::comspec());
+            let mut command = Command::new(crate::support::process::interpreter::comspec()?);
             command.raw_arg(format!("/S /C \"\"{}\"\"", target.display()));
             command
         } else {

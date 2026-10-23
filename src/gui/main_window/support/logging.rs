@@ -1,9 +1,26 @@
 use std::fs::{File, OpenOptions};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug)]
+pub struct LogOpenError {
+    pub path: PathBuf,
+    pub error: std::io::Error,
+}
+
+impl std::fmt::Display for LogOpenError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "failed to open launcher log {}: {}",
+            self.path.display(),
+            self.error
+        )
+    }
+}
 
 #[derive(Clone)]
 pub struct LauncherLog {
@@ -13,14 +30,14 @@ pub struct LauncherLog {
 }
 
 impl LauncherLog {
-    pub fn open(launcher_dir: &Path) -> Result<Self, String> {
+    pub fn open(launcher_dir: &Path) -> Result<Self, LogOpenError> {
         let path = launcher_dir.join("GameToaster.log");
 
         let file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&path)
-            .map_err(|error| format!("failed to open launcher log {}: {error}", path.display()))?;
+            .map_err(|error| LogOpenError { path, error })?;
         Ok(Self {
             file: Arc::new(Mutex::new(file)),
             enabled: Arc::new(AtomicBool::new(false)),

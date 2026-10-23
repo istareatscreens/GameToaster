@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
 use std::os::windows::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -244,11 +244,7 @@ fn command_for(script: &Path, arguments: &[String]) -> Result<Command, String> {
             Ok(command)
         }
         "ps1" => {
-            let shell = std::env::var_os("SystemRoot")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
-                .join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-            let mut command = Command::new(shell);
+            let mut command = Command::new(crate::support::system_folders::windows_powershell()?);
             command.args([
                 "-NoProfile",
                 "-NonInteractive",

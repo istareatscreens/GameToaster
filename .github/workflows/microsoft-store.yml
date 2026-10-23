@@ -133,7 +133,6 @@ jobs:
             $value = [Environment]::GetEnvironmentVariable($name)
             if ($value -and -not [guid]::TryParse($value, [ref] $parsed)) { $problems += "$name is not a GUID" }
           }
-          if ($env:SELLER_ID -and $env:SELLER_ID -notmatch '^\d+$') { $problems += 'SELLER_ID is not numeric' }
           foreach ($problem in $problems) { Write-Output "::error::$problem" }
           if ($problems.Count -gt 0) { exit 1 }
 

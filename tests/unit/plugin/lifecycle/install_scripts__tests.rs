@@ -2,6 +2,7 @@ use super::*;
 use crate::plugin::deployment::AssignmentState;
 use crate::plugin::manifest::{InstallScript, Manifest};
 use semver::Version;
+use std::path::PathBuf;
 
 struct Setup {
     _root: tempfile::TempDir,

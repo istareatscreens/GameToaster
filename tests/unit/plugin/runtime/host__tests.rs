@@ -725,7 +725,7 @@ fn paused_a_cancel_ends_both_the_wrapper_and_the_program() {
 fn paused_a_program_still_running_at_the_deadline_times_out_through_a_junction() {
     let root = tempfile::tempdir().unwrap();
     let junction = root.path().join("plugin");
-    let made = Command::new(crate::support::process::interpreter::comspec())
+    let made = Command::new(crate::support::process::interpreter::comspec().unwrap())
         .args(["/d", "/c", "mklink", "/J"])
         .arg(&junction)
         .arg(fake_plugin().parent().unwrap())

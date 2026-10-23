@@ -634,7 +634,9 @@
     "error_title": "GameToaster 错误",
     "task_disabled_by_user": "Windows 中已关闭随 Windows 启动 GameToaster。请在任务管理器的“启动”选项卡或“设置 > 应用 > 启动”中重新打开。",
     "task_disabled_by_policy": "随 Windows 启动 GameToaster 已被策略禁用，或此设备不支持。",
-    "task_not_enabled": "Windows 未启用随 Windows 启动 GameToaster。"
+    "task_not_enabled": "Windows 未启用随 Windows 启动 GameToaster。",
+    "state_folder_not_writable": "GameToaster 无法写入 %{folder}。便携版 GameToaster 会把设置、日志和插件保存在 GameToaster.exe 所在的文件夹中。请把 GameToaster 文件夹移到可写入的位置（例如“文档”或游戏文件夹），然后重新启动。",
+    "graphics_hint": "GameToaster 需要支持 OpenGL 2.1 或更高版本的显卡驱动程序。Microsoft 基本显示适配器和大多数远程桌面会话无法提供。请安装显卡驱动程序，然后重新启动 GameToaster。"
   },
   "config_notice": {
     "upgraded_title": "已转换配置",

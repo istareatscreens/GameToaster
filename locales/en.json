@@ -634,7 +634,9 @@
     "error_title": "GameToaster error",
     "task_disabled_by_user": "Starting GameToaster with Windows was turned off in Windows. Turn it back on in Task Manager's Startup tab or in Settings > Apps > Startup.",
     "task_disabled_by_policy": "Starting GameToaster with Windows is disabled by policy or not supported on this device.",
-    "task_not_enabled": "Windows did not turn on starting GameToaster with Windows."
+    "task_not_enabled": "Windows did not turn on starting GameToaster with Windows.",
+    "state_folder_not_writable": "GameToaster cannot write in %{folder}. A portable GameToaster keeps its settings, its log and its plugins in the folder beside GameToaster.exe. Move the GameToaster folder to a place you can write to, such as your Documents or a games folder, and start it again.",
+    "graphics_hint": "GameToaster needs a graphics driver with OpenGL 2.1 or later. The Microsoft Basic Display Adapter and most Remote Desktop sessions do not provide one. Install the driver for the graphics card and start GameToaster again."
   },
   "config_notice": {
     "upgraded_title": "Settings converted",

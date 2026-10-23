@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use eframe::egui;
-use rust_i18n::t;
 
 use crate::launcher_gui::config::Notice;
 use crate::launcher_gui::logging::LauncherLog;
@@ -76,7 +75,7 @@ pub fn run(
             )))
         }),
     )
-    .map_err(|error| t!("errors.gui_failed", error => error).to_string())
+    .map_err(|error| crate::launcher_gui::startup_failure::gui_failure_message(&error.to_string()))
 }
 
 fn main_window_starts_visible(

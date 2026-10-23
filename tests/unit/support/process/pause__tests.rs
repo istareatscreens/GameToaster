@@ -22,7 +22,7 @@ const FOLDERS: &[&str] = &[
 ];
 
 fn run(command_line: &str) -> (i32, String) {
-    let shell = comspec();
+    let shell = comspec().unwrap();
     let rest = command_line
         .strip_prefix(&format!("{} ", quote_argument(shell.as_os_str())))
         .expect("the line starts with the interpreter");
@@ -42,7 +42,7 @@ fn run(command_line: &str) -> (i32, String) {
 fn exit_program(folder: &Path) -> PathBuf {
     std::fs::create_dir_all(folder).unwrap();
     let program = folder.join("exit tool.exe");
-    std::fs::copy(comspec(), &program).unwrap();
+    std::fs::copy(comspec().unwrap(), &program).unwrap();
     program
 }
 
@@ -70,7 +70,7 @@ fn a_program_pauses_on_every_failure_and_its_exact_code_comes_back() {
         let program = exit_program(&root.path().join(folder));
         for code in [0, 20, -8, -1_073_741_819] {
             let line = paused_command_line(
-                &comspec(),
+                &comspec().unwrap(),
                 &program,
                 &[
                     OsString::from("/d"),
@@ -108,7 +108,7 @@ fn a_script_pauses_whenever_its_last_error_level_is_not_zero() {
     ] {
         let script = folder.join(name);
         std::fs::write(&script, body).unwrap();
-        let (exit, printed) = run(&paused_command_line(&comspec(), &script, &[]).unwrap());
+        let (exit, printed) = run(&paused_command_line(&comspec().unwrap(), &script, &[]).unwrap());
         assert_eq!(exit, code, "{name}: {printed}");
         assert_eq!(printed.trim().is_empty(), code == 0, "{name}: {printed:?}");
     }

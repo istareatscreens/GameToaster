@@ -20,6 +20,13 @@ pub fn set_enabled(enabled: bool) -> Result<(), String> {
     }
 }
 
+pub fn repair_entry() -> Result<(), String> {
+    match InstallKind::current()? {
+        InstallKind::Portable => run_key::repair(),
+        InstallKind::Packaged => Ok(()),
+    }
+}
+
 pub fn launched_at_sign_in(args: &[OsString]) -> bool {
     match InstallKind::current() {
         Ok(InstallKind::Portable) => run_key::launched_at_sign_in(args),

@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn the_interpreter_is_the_configured_command_processor() {
-    let shell = comspec();
+    let shell = comspec().unwrap();
     assert!(shell.is_file(), "{}", shell.display());
     assert!(shell
         .file_name()

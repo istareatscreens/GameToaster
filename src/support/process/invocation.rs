@@ -19,7 +19,7 @@ pub fn invocation(
     plan: ConsolePlan,
 ) -> Result<Invocation, String> {
     if plan.pause_on_failure {
-        let shell = comspec();
+        let shell = comspec()?;
         let line = paused_command_line(&shell, program, arguments)?;
         return Ok(Invocation {
             application: shell,
@@ -27,7 +27,7 @@ pub fn invocation(
         });
     }
     if is_script(program) {
-        let shell = comspec();
+        let shell = comspec()?;
         let line = interpreter_command_line(&shell, &program_line(program, arguments)?);
         return Ok(Invocation {
             application: shell,

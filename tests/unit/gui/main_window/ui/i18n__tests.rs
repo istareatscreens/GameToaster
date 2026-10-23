@@ -383,6 +383,7 @@ const TECHNICAL_TOKENS: &[&str] = &[
     "TOML",
     "MD5",
     "SHA-256",
+    "OpenGL",
     "GameToaster",
     "Windows",
     "Microsoft",

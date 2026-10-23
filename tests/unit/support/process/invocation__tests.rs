@@ -28,7 +28,7 @@ fn a_program_without_pause_runs_as_itself() {
 
 #[test]
 fn a_script_runs_in_the_interpreter_with_its_path_escaped() {
-    let shell = comspec();
+    let shell = comspec().unwrap();
     let (application, line) = run(
         r"C:\Games\%USERNAME%\run.bat",
         plan(ConsoleWindow::Hidden, false),
@@ -46,7 +46,7 @@ fn a_script_runs_in_the_interpreter_with_its_path_escaped() {
 
 #[test]
 fn a_pausing_program_or_script_runs_under_the_pause_wrapper() {
-    let shell = comspec();
+    let shell = comspec().unwrap();
     for program in [r"C:\Games\game.exe", r"C:\Games\run.cmd"] {
         let (application, line) = run(program, plan(ConsoleWindow::Shown, true)).unwrap();
         assert_eq!(application, shell);

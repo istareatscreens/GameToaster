@@ -6,6 +6,21 @@ fn main() {
     embed_resource::compile_for("assets/gametoaster.rc", ["GameToaster"], version_macros())
         .manifest_optional()
         .unwrap();
+    declare_minimum_windows_version();
+}
+
+fn declare_minimum_windows_version() {
+    if std::env::var("PROFILE").as_deref() != Ok("release") {
+        return;
+    }
+    println!(
+        "cargo:rustc-link-arg-bins=/SUBSYSTEM:{},10.0",
+        release_subsystem()
+    );
+}
+
+fn release_subsystem() -> &'static str {
+    "WINDOWS"
 }
 
 fn version_macros() -> [String; 4] {

@@ -4,17 +4,19 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use super::command_line::quote_argument;
+use crate::support::system_folders;
 
 const SWITCHES: &str = "/e:on /v:off /d /s /c";
 const PERCENT: &str = "%%cd:~,%";
 
 const UNQUOTED: &str = r"#$*+-./:?@\_";
 
-pub fn comspec() -> PathBuf {
-    std::env::var_os("ComSpec")
+pub fn comspec() -> Result<PathBuf, String> {
+    let configured = std::env::var_os("ComSpec")
         .map(PathBuf::from)
         .filter(|path| path.is_file())
-        .unwrap_or_else(|| PathBuf::from(r"C:\Windows\System32\cmd.exe"))
+        .map(PathBuf::into_os_string);
+    system_folders::command_interpreter_from(configured, std::env::var_os("SystemRoot"))
 }
 
 pub fn interpreter_command_line(shell: &Path, line: &str) -> String {
@@ -30,7 +32,7 @@ fn interpreter_arguments(line: &str) -> String {
 }
 
 pub fn script_command(script: &Path, arguments: &[OsString]) -> Result<Command, String> {
-    let mut command = Command::new(comspec());
+    let mut command = Command::new(comspec()?);
     command.raw_arg(interpreter_arguments(&program_line(script, arguments)?));
     Ok(command)
 }

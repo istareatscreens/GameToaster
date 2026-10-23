@@ -634,7 +634,9 @@
     "error_title": "GameToaster のエラー",
     "task_disabled_by_user": "Windows 起動時の GameToaster の起動は、Windows 側でオフにされています。タスク マネージャーの [スタートアップ] タブ、または [設定] > [アプリ] > [スタートアップ] でオンに戻してください。",
     "task_disabled_by_policy": "Windows 起動時の GameToaster の起動は、ポリシーで無効にされているか、このデバイスではサポートされていません。",
-    "task_not_enabled": "Windows は GameToaster の自動起動をオンにしませんでした。"
+    "task_not_enabled": "Windows は GameToaster の自動起動をオンにしませんでした。",
+    "state_folder_not_writable": "GameToaster は %{folder} に書き込めません。ポータブル版の GameToaster は、設定・ログ・プラグインを GameToaster.exe と同じフォルダーに保存します。GameToaster のフォルダーを書き込みできる場所（ドキュメントやゲーム用のフォルダーなど）に移動してから、もう一度起動してください。",
+    "graphics_hint": "GameToaster には OpenGL 2.1 以降に対応したグラフィックス ドライバーが必要です。Microsoft 基本ディスプレイ アダプターや多くのリモート デスクトップ セッションでは利用できません。グラフィックス カードのドライバーをインストールしてから、GameToaster をもう一度起動してください。"
   },
   "config_notice": {
     "upgraded_title": "設定を変換しました",
