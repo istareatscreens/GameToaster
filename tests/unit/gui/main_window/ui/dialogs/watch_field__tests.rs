@@ -37,3 +37,18 @@ fn the_field_leaves_the_browse_button_exactly_the_room_it_takes() {
         "the Browse button ends at the body's edge: {browse:?} {body:?}"
     );
 }
+
+#[test]
+fn a_script_name_is_refused_and_a_program_name_is_not() {
+    for script in [
+        "start.bat",
+        " START.CMD ",
+        r"C:\games\run.bat",
+        "folder\\go.cmd",
+    ] {
+        assert!(names_script(script), "{script:?}");
+    }
+    for program in ["", "game.exe", "client", "start.bat.exe", "notes.txt"] {
+        assert!(!names_script(program), "{program:?}");
+    }
+}

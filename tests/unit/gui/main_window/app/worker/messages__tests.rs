@@ -73,3 +73,19 @@ fn a_watched_process_wait_is_armed_only_by_a_successful_launch() {
     assert!(error_arm.contains("Dialog::error(title, message)"));
     assert!(!error_arm.contains("PendingHide"));
 }
+
+#[test]
+fn a_launch_stage_relabels_only_a_launch_in_flight() {
+    let _locale = crate::gui::common::harness::locale("en");
+    assert_eq!(
+        LaunchStage::PreStartScript.relabel(Some("Launching game…".into())),
+        Some("Running the pre-start script…".into())
+    );
+    assert_eq!(
+        LaunchStage::Launching.relabel(Some("Running the pre-start script…".into())),
+        Some("Launching game…".into())
+    );
+
+    assert_eq!(LaunchStage::PreStartScript.relabel(None), None);
+    assert_eq!(LaunchStage::Launching.relabel(None), None);
+}

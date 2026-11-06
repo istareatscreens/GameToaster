@@ -13,7 +13,7 @@ fn config(exe: &str) -> LauncherConfig {
             plugin: None,
             hotkey: None,
             watch_exe: None,
-            close_mode: CloseMode::KillExe,
+            pre_start_script: None,
             close_script: None,
             close_hotkey: None,
             config_targets: Vec::new(),
@@ -66,27 +66,18 @@ fn close_plan_decision_tree() {
         plugin: None,
         hotkey: None,
         watch_exe: None,
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         close_hotkey: None,
         config_targets: Vec::new(),
     };
 
     let g = GameEntry {
-        close_mode: CloseMode::Script,
+        pre_start_script: Some(PathBuf::from(r"C:\g\start.bat")),
         close_script: Some(PathBuf::from(r"C:\g\close.bat")),
         ..base(r"C:\g\game.exe")
     };
-    assert_eq!(
-        g.close_plan(),
-        ClosePlan::RunScript(PathBuf::from(r"C:\g\close.bat"))
-    );
-
-    let g = GameEntry {
-        close_mode: CloseMode::Script,
-        ..base(r"C:\g\game.exe")
-    };
-    assert_eq!(g.close_plan(), ClosePlan::Nothing);
+    assert_eq!(g.close_plan(), ClosePlan::Kill("game.exe".into()));
 
     let g = GameEntry {
         watch_exe: Some("watch.exe".into()),
@@ -100,6 +91,11 @@ fn close_plan_decision_tree() {
     );
 
     assert_eq!(base(r"C:\g\run.bat").close_plan(), ClosePlan::Nothing);
+    let g = GameEntry {
+        close_script: Some(PathBuf::from(r"C:\g\close.bat")),
+        ..base(r"C:\g\run.bat")
+    };
+    assert_eq!(g.close_plan(), ClosePlan::Nothing);
 
     let g = GameEntry {
         watch_exe: Some("   ".into()),
@@ -223,4 +219,44 @@ fn the_automatic_watch_name_yields_to_a_plugins_target_and_an_operators_name_doe
     game.plugin = None;
     assert_eq!(game.watch_target(), None);
     assert_eq!(game.watch_target_path(), None);
+}
+
+#[test]
+fn a_stored_script_name_is_never_the_watch_target() {
+    for stored in ["start.bat", "START.CMD", r"Package\launch.bat"] {
+        let mut game = config(r"C:\Games\Arcade\start.bat").games.remove(0);
+        game.watch_exe = Some(stored.into());
+        assert_eq!(game.watch_target(), None, "{stored}");
+        assert_eq!(game.watch_target_path(), None, "{stored}");
+    }
+
+    let mut game = config(r"C:\Games\Arcade\start.bat").games.remove(0);
+    game.watch_exe = Some("client.exe".into());
+    assert_eq!(game.watch_target().as_deref(), Some("client.exe"));
+}
+
+#[test]
+fn a_plugin_target_that_is_a_script_is_never_the_watch_target() {
+    let mut game = config(r"C:\Games\Arcade\start.bat").games.remove(0);
+    game.plugin = Some(PluginAssignment {
+        plugin_id: "org.example.plugin".into(),
+        revision: PluginRevision {
+            version: semver::Version::new(1, 0, 0),
+            sha256: "a".repeat(64),
+        },
+        update_policy: PluginUpdatePolicy::Pinned,
+        allow_prerelease: false,
+        copy_zero_matches_to_game_folder: false,
+        search_directory_destinations: false,
+        assignment_id: "b".repeat(32),
+        resolved_launcher: None,
+        resolved_watch_target: Some(game.selected_target.clone()),
+        grants: Vec::new(),
+        ledger_reference: PathBuf::from(r"C:\state\ledger.toml"),
+    });
+    assert_eq!(game.watch_target(), None);
+    assert_eq!(game.watch_target_path(), None);
+
+    game.watch_exe = Some("game.exe".into());
+    assert_eq!(game.watch_target().as_deref(), Some("game.exe"));
 }

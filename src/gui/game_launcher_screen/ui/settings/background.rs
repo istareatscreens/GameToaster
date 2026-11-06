@@ -13,7 +13,7 @@ pub(super) fn show(ui: &mut egui::Ui, launcher_dir: &std::path::Path, draft: &mu
         )
         .clicked()
         {
-            if let Some(path) = rfd::FileDialog::new()
+            if let Some(path) = crate::gui::common::file_dialog::file_dialog()
                 .set_title(t!("controller.file_dialog.background_title").to_string())
                 .add_filter(
                     t!("controller.file_dialog.image_filter").as_ref(),

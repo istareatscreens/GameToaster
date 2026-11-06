@@ -390,7 +390,7 @@ fn select_matching(
     }
 }
 
-fn interface_path(
+pub(super) fn interface_path(
     info: HDEVINFO,
     interface: &SP_DEVICE_INTERFACE_DATA,
 ) -> Result<Vec<u16>, String> {
@@ -435,7 +435,7 @@ fn open_path(path: &[u16], audit: &Arc<ResourceAudit>) -> Result<TrackedHandle, 
     TrackedHandle::new(handle, audit)
 }
 
-struct DeviceInfoGuard(HDEVINFO);
+pub(super) struct DeviceInfoGuard(pub(super) HDEVINFO);
 
 impl Drop for DeviceInfoGuard {
     fn drop(&mut self) {

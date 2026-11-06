@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use eframe::egui::{self, Color32, FontId};
 
 use super::metrics::{CREDIT_READOUT_BOTTOM_OFFSET, LOADING_STATUS_TOP_OFFSET};
@@ -48,8 +50,36 @@ fn paint_pill(
     offset_units: f32,
     color: Color32,
 ) {
-    if text.is_empty() {
+    let Some((box_rect, galley)) =
+        pill_layout(painter, center, radius, scale, text, offset_units, color)
+    else {
         return;
+    };
+    painter.rect(
+        box_rect,
+        pill_corner(scale),
+        Color32::WHITE,
+        theme::BORDER,
+        egui::StrokeKind::Inside,
+    );
+    painter.galley(box_rect.center() - galley.size() / 2.0, galley, color);
+}
+
+pub(super) fn pill_corner(scale: f32) -> egui::CornerRadius {
+    egui::CornerRadius::same((12.0 * scale).clamp(4.0, 20.0) as u8)
+}
+
+pub(super) fn pill_layout(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    radius: f32,
+    scale: f32,
+    text: &str,
+    offset_units: f32,
+    color: Color32,
+) -> Option<(egui::Rect, Arc<egui::Galley>)> {
+    if text.is_empty() {
+        return None;
     }
     let pill_y = center.y + offset_units * scale;
 
@@ -77,14 +107,7 @@ fn paint_pill(
 
     let box_rect =
         egui::Rect::from_center_size(egui::pos2(center.x, pill_y), galley.size() + 2.0 * pad);
-    painter.rect(
-        box_rect,
-        egui::CornerRadius::same((12.0 * scale).clamp(4.0, 20.0) as u8),
-        Color32::WHITE,
-        theme::BORDER,
-        egui::StrokeKind::Inside,
-    );
-    painter.galley(box_rect.center() - galley.size() / 2.0, galley, color);
+    Some((box_rect, galley))
 }
 
 #[cfg(test)]

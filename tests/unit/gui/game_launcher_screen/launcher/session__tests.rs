@@ -44,8 +44,9 @@ fn open_close_is_calibration_gated_and_restore_tolerates_missing_controller() {
     assert!(launcher.is_open());
     assert_eq!(launcher.viewport_resources(), (true, true, 0));
     assert!(launcher
-        .prepare_game_handoff(GameId(1), ControllerLaunchSource::Controller, true, false)
+        .begin_game_launch(GameId(1), ControllerLaunchSource::Controller, true, false)
         .unwrap());
+    launcher.complete_game_handoff(GameId(1)).unwrap();
     launcher.launch_succeeded().unwrap();
     assert!(launcher.game_exited());
     assert!(launcher.open(screen).is_ok());

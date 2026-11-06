@@ -12,7 +12,7 @@ pub(super) fn show(ui: &mut egui::Ui, watch_exe: &mut String, placeholder: &str)
         )
     });
     if browse.clicked() {
-        if let Some(path) = rfd::FileDialog::new()
+        if let Some(path) = crate::gui::common::file_dialog::file_dialog()
             .set_title(t!("picker.watch_exe").to_string())
             .add_filter(t!("picker.filter_exe"), &["exe"])
             .pick_file()
@@ -22,6 +22,13 @@ pub(super) fn show(ui: &mut egui::Ui, watch_exe: &mut String, placeholder: &str)
             }
         }
     }
+    if names_script(watch_exe) {
+        components::text::error_text(ui, &t!("gs.watch_script_invalid"));
+    }
+}
+
+pub(super) fn names_script(text: &str) -> bool {
+    crate::support::process::image::is_script(std::path::Path::new(text.trim()))
 }
 
 #[cfg(test)]

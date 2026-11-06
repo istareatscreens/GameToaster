@@ -34,8 +34,9 @@ fn running_state_has_no_controller_resources_or_viewport_submission() {
     let mut launcher = test_launcher(&config, "running-invariants");
     launcher.open(&screen).unwrap();
     launcher
-        .prepare_game_handoff(GameId(1), ControllerLaunchSource::MainGui, true, false)
+        .begin_game_launch(GameId(1), ControllerLaunchSource::MainGui, true, false)
         .unwrap();
+    launcher.complete_game_handoff(GameId(1)).unwrap();
     launcher.launch_succeeded().unwrap();
     assert_eq!(
         launcher.lifecycle.state(),

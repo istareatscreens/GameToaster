@@ -9,7 +9,7 @@ use super::*;
 use crate::game_launcher_screen::{
     ControllerConfig, LauncherXAction, MonitorCalibration, OrientationProfile,
 };
-use crate::launcher_gui::model::{CloseMode, GameId, PluginUpdatePolicy};
+use crate::launcher_gui::model::{GameId, PluginUpdatePolicy};
 
 fn driver(driver_id: &str, options: &[(&str, &str)]) -> ControllerConfig {
     let mut config = crate::game_launcher_screen::default_controller_config(driver_id).unwrap();
@@ -204,7 +204,8 @@ fn the_previous_launchers_file_becomes_a_schema_3_file_and_stays_untouched() {
         );
         assert_eq!(game.hotkey, Some("Ctrl+Shift+F5".parse().unwrap()));
         assert_eq!(game.watch_exe.as_deref(), Some("example.exe"));
-        assert_eq!(game.close_mode, CloseMode::Script);
+
+        assert_eq!(game.pre_start_script, None);
         assert_eq!(game.close_script, Some(PathBuf::from(r"C:\遊戲\close.bat")));
         assert_eq!(game.close_hotkey, Some("Ctrl+Shift+F6".parse().unwrap()));
         assert_eq!(
@@ -344,6 +345,75 @@ fn a_schema_2_file_is_upgraded_after_a_dated_backup() {
 }
 
 #[test]
+fn a_schema_3_file_keeps_each_scripts_effect_after_a_dated_backup() {
+    let state = tempfile::tempdir().unwrap();
+    let path = state.path().join(FILE_NAME);
+    let original = as_written(fixtures::V3_SCRIPTS);
+    fs::write(&path, &original).unwrap();
+
+    let opened = open(state.path()).unwrap();
+
+    let Some(Notice::Upgraded {
+        kept,
+        plugin_needed,
+    }) = &opened.notice
+    else {
+        panic!("{:?}", opened.notice);
+    };
+    assert!(plugin_needed.is_empty());
+    let name = kept.file_name().unwrap().to_string_lossy().into_owned();
+    assert!(is_dated_backup(&name, "GameToaster.ini.schema-3"), "{name}");
+    assert_eq!(fs::read_to_string(kept).unwrap(), original);
+    assert_eq!(names(state.path()), only(&[FILE_NAME, &name]));
+    assert_eq!(entries(&path), written_entries(&opened.config));
+    let written = fs::read_to_string(&path).unwrap();
+    assert!(written.contains("schema_version=4"), "{written}");
+    assert!(!written.contains("close_mode"), "{written}");
+
+    let scripts: Vec<(u64, Option<PathBuf>, Option<PathBuf>)> = opened
+        .config
+        .games
+        .iter()
+        .map(|game| {
+            (
+                game.id.0,
+                game.pre_start_script.clone(),
+                game.close_script.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        scripts,
+        [
+            (1, None, None),
+            (2, None, Some(PathBuf::from(r"C:\遊戲\close.bat"))),
+            (3, None, None),
+        ]
+    );
+
+    assert_eq!(opened.config.default_game, Some(GameId(2)));
+    assert_eq!(opened.config.next_game_id, 4);
+    let plugin = opened.config.games[0]
+        .plugin
+        .as_ref()
+        .expect("the plugin assignment is kept");
+    assert_eq!(plugin.plugin_id, "org.example.plugin");
+    assert_eq!(plugin.update_policy, PluginUpdatePolicy::TrackLatest);
+    let scripted = &opened.config.games[1];
+    assert_eq!(scripted.label, "日本語 ゲーム");
+    assert_eq!(scripted.watch_exe.as_deref(), Some("example.exe"));
+    assert_eq!(scripted.hotkey, Some("Ctrl+Shift+F5".parse().unwrap()));
+    assert_eq!(
+        scripted.close_hotkey,
+        Some("Ctrl+Shift+F6".parse().unwrap())
+    );
+    assert_eq!(
+        opened.config.games[2].selected_target,
+        PathBuf::from(r"D:\Games\Bat\start.bat")
+    );
+}
+
+#[test]
 fn a_schema_2_controller_becomes_its_schema_3_driver() {
     for (text, expected) in [
         (
@@ -370,6 +440,7 @@ fn a_second_start_after_an_upgrade_changes_nothing() {
     for (file, text) in [
         (PREVIOUS, fixtures::V1_FULL),
         (FILE_NAME, fixtures::V2_FULL),
+        (FILE_NAME, fixtures::V3_SCRIPTS),
     ] {
         let state = tempfile::tempdir().unwrap();
         fs::write(state.path().join(file), as_written(text)).unwrap();
@@ -437,8 +508,8 @@ fn a_file_without_a_version_is_kept_and_replaced_by_the_defaults() {
 #[test]
 fn a_newer_file_is_kept_and_replaced_by_the_defaults() {
     assert_eq!(
-        reset_reason(b"[launcher]\r\nschema_version=4\r\n"),
-        ResetReason::Newer(4)
+        reset_reason(b"[launcher]\r\nschema_version=5\r\n"),
+        ResetReason::Newer(5)
     );
 }
 
@@ -588,7 +659,7 @@ fn an_unreadable_previous_launchers_file_stays_where_it_is() {
 fn a_current_file_with_an_invalid_value_stops_the_start_unchanged() {
     let state = tempfile::tempdir().unwrap();
     let path = state.path().join(FILE_NAME);
-    let original = "[launcher]\r\nschema_version=3\r\nauto_hide_on_launch=perhaps\r\n";
+    let original = "[launcher]\r\nschema_version=4\r\nauto_hide_on_launch=perhaps\r\n";
     fs::write(&path, original).unwrap();
 
     let error = open(state.path()).err().expect("the start stops");

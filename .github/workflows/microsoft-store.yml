@@ -133,6 +133,12 @@ jobs:
             $value = [Environment]::GetEnvironmentVariable($name)
             if ($value -and -not [guid]::TryParse($value, [ref] $parsed)) { $problems += "$name is not a GUID" }
           }
+          $sellerId = 0
+          $digits = [Globalization.NumberStyles]::None
+          $invariant = [Globalization.CultureInfo]::InvariantCulture
+          if ($env:SELLER_ID -and -not ([int]::TryParse($env:SELLER_ID, $digits, $invariant, [ref] $sellerId) -and $sellerId -gt 0)) {
+            $problems += 'SELLER_ID must be the Seller ID number from Partner Center > Account settings > Legal info > Developer > Publisher IDs. msstore converts it to a 32-bit number, so a GUID cannot work.'
+          }
           foreach ($problem in $problems) { Write-Output "::error::$problem" }
           if ($problems.Count -gt 0) { exit 1 }
 

@@ -22,7 +22,7 @@ impl DialogContent for PluginLibraryDialog<'_> {
         let event = &mut *self.event;
         ui.horizontal(|ui| {
             if components::action(ui, t!("plugins.import")).clicked() {
-                if let Some(path) = rfd::FileDialog::new()
+                if let Some(path) = crate::gui::common::file_dialog::file_dialog()
                     .set_title(t!("plugins.import_title").to_string())
                     .add_filter(t!("plugins.package_filter").to_string(), &["zip", "toml"])
                     .pick_file()
@@ -107,7 +107,7 @@ impl DialogContent for PluginLibraryDialog<'_> {
                     "{}-{}.zip",
                     plugin.revision.plugin_id, plugin.revision.plugin_version
                 );
-                if let Some(output) = rfd::FileDialog::new()
+                if let Some(output) = crate::gui::common::file_dialog::file_dialog()
                     .set_title(t!("plugins.export_title").to_string())
                     .set_file_name(&suggested)
                     .add_filter(t!("plugins.zip_filter").to_string(), &["zip"])

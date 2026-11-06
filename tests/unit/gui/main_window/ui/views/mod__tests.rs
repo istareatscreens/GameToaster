@@ -94,7 +94,7 @@ fn the_reserve_follows_the_combo_boxes_real_height() {
 
 #[test]
 fn the_reserve_tracks_the_row_count_and_the_credit_toggle_is_not_drawn() {
-    assert_eq!(settings::left_row_count(), 5);
+    assert_eq!(settings::left_row_count(), 6);
     let rows = settings::left_row_count() as f32;
     let context = launcher_context();
     let mut reserved = 0.0;
@@ -108,6 +108,7 @@ fn the_reserve_tracks_the_row_count_and_the_credit_toggle_is_not_drawn() {
         SettingKey::HideCommandWindows,
         SettingKey::LaunchDefaultOnOpen,
         SettingKey::PauseOnFailure,
+        SettingKey::ConfigProgramsOnMainWindow,
     ] {
         assert!(settings::draws_setting(key), "{key:?} must be drawn");
     }

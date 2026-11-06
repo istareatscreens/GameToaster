@@ -2,10 +2,13 @@ use std::path::PathBuf;
 
 use crate::launcher_gui::model::{GameEntry, GameId, LauncherConfig};
 use crate::launcher_gui::process::ProcessCompletion;
+use crate::launcher_gui::runtime::{HandoffGate, LaunchCancel};
 use crate::plugin::catalog::library::{PluginDescriptor, PluginSelection};
 use crate::plugin::runtime::{Message, RuntimeEvent};
 use crate::plugin::workflow::{PluginActionApproval, PluginActionPreview};
 use crate::support::process::handle::CreationTime;
+
+use super::super::launch_monitor::Presence;
 
 #[derive(Debug)]
 pub(in crate::gui::main_window::app) enum WorkerCommand {
@@ -76,9 +79,13 @@ pub(in crate::gui::main_window::app) enum WorkerCommand {
         source: Option<PathBuf>,
         clear_image: bool,
     },
+
     Launch {
         game: GameEntry,
         config: LauncherConfig,
+        cancel: LaunchCancel,
+
+        handoff: HandoffGate,
     },
     CloseGame {
         game: GameEntry,
@@ -98,6 +105,15 @@ pub(in crate::gui::main_window::app) enum WorkerCommand {
         operation_id: String,
         event: RuntimeEvent,
     },
+
+    FollowProgram {
+        game_id: GameId,
+    },
+
+    ProgramPresence {
+        game_id: GameId,
+        presence: Presence,
+    },
 }
 
 #[derive(Debug)]
@@ -107,6 +123,10 @@ pub(in crate::gui::main_window::app) enum WorkerResult {
     ControllerImagePicked(Option<PathBuf>),
     ConfigCommitted(LauncherConfig),
     ConfigSavedQuiet,
+
+    HandoffRequired {
+        game_id: GameId,
+    },
     Launched {
         game_id: GameId,
         root_pid: u32,
@@ -116,8 +136,15 @@ pub(in crate::gui::main_window::app) enum WorkerResult {
     },
 
     ProgramStarted {
+        game_id: Option<GameId>,
         process_id: u32,
         created: CreationTime,
+    },
+
+    LaunchStage(LaunchStage),
+
+    LaunchCancelled {
+        game_id: GameId,
     },
 
     PluginMessage {
@@ -154,12 +181,36 @@ pub(in crate::gui::main_window::app) enum WorkerResult {
         exit_observed: bool,
     },
 
+    ProgramPresence {
+        game_id: GameId,
+        presence: Presence,
+    },
+
     ActiveGamesClosed,
     ShutdownComplete(Result<(), String>),
     Error {
         title: String,
         message: String,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::gui::main_window::app) enum LaunchStage {
+    PreStartScript,
+
+    Launching,
+}
+
+impl LaunchStage {
+    pub(in crate::gui::main_window::app) fn relabel(self, busy: Option<String>) -> Option<String> {
+        busy.map(|_| {
+            match self {
+                Self::PreStartScript => rust_i18n::t!("busy.pre_start_script"),
+                Self::Launching => rust_i18n::t!("busy.launching"),
+            }
+            .to_string()
+        })
+    }
 }
 
 #[cfg(test)]

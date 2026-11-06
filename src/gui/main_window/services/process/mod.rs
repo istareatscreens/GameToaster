@@ -3,20 +3,22 @@ use std::sync::Arc;
 
 use crate::launcher_gui::model::GameId;
 
-mod console;
+mod console_watch;
 mod discovery;
 mod escaped_watch;
 mod job;
 mod spawn;
 mod window;
 
-pub use console::hide_console_for_pid;
+#[cfg(test)]
+pub(crate) use console_watch::{followed, Command as WatchCommand};
+pub use console_watch::{ConsoleWatch, ConsoleWatchHandle};
 pub use discovery::{
     find_pid_by_name, find_pid_by_path, is_process_path_running, is_process_running, pids_by_name,
     pids_by_path, terminate_by_name, terminate_by_path, ProcessWatch,
 };
 pub(crate) use escaped_watch::{EscapedProcessWatch, WatchEvent};
-pub use window::has_visible_window;
+pub use window::{has_visible_window, is_console_window};
 
 use job::ManagedJob;
 use spawn::validate_spawn_spec;

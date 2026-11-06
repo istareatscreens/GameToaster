@@ -38,6 +38,9 @@ fn label_launch_default() -> String {
 fn label_pause_failure() -> String {
     t!("settings.pause_failure").to_string()
 }
+fn label_config_programs_on_main_window() -> String {
+    t!("settings.config_programs_on_main_window").to_string()
+}
 fn label_block_exit_on_credit() -> String {
     t!("settings.block_exit_on_credit").to_string()
 }
@@ -52,6 +55,9 @@ fn current_launch_default(config: &LauncherConfig) -> bool {
 }
 fn current_pause_failure(config: &LauncherConfig) -> bool {
     config.settings.pause_on_failure
+}
+fn current_config_programs_on_main_window(config: &LauncherConfig) -> bool {
+    config.settings.launch_config_programs_on_main_window
 }
 fn current_block_exit_on_credit(config: &LauncherConfig) -> bool {
     config.settings.block_exit_on_credit
@@ -83,6 +89,12 @@ const LEFT_SETTING_ROWS: &[SettingRowSpec] = &[
         shown: true,
     },
     SettingRowSpec {
+        key: SettingKey::ConfigProgramsOnMainWindow,
+        label: label_config_programs_on_main_window,
+        current: current_config_programs_on_main_window,
+        shown: true,
+    },
+    SettingRowSpec {
         key: SettingKey::BlockExitOnCredit,
         label: label_block_exit_on_credit,
         current: current_block_exit_on_credit,
@@ -104,18 +116,27 @@ pub(super) fn draws_setting(key: SettingKey) -> bool {
 }
 
 pub(super) fn reserved_height(ui: &mut egui::Ui) -> f32 {
-    let rows = left_row_count() as f32;
-    let left = rows * ROW_HEIGHT + (rows - 1.0) * ROW_SPACING;
+    let right = middle_height(combo_height(ui, "settings-reserve-combo"));
+    left_height().max(right).max(CONTROLLER_CARD_HEIGHT) + SETTINGS_BLOCK_PADDING
+}
 
-    let combo = components::measure(ui, |ui| {
-        Combo::new("settings-reserve-combo", &mut ())
+fn left_height() -> f32 {
+    let rows = left_row_count() as f32;
+    rows * ROW_HEIGHT + (rows - 1.0) * ROW_SPACING
+}
+
+fn middle_height(combo: f32) -> f32 {
+    2.0 * (ROW_HEIGHT + combo) + 3.0 * ROW_SPACING
+}
+
+fn combo_height(ui: &mut egui::Ui, id: &str) -> f32 {
+    components::measure(ui, |ui| {
+        Combo::new(id, &mut ())
             .placeholder("M")
             .width(COMBO_WIDTH)
             .show(ui)
     })
-    .y;
-    let right = 2.0 * (ROW_HEIGHT + combo) + 3.0 * ROW_SPACING;
-    left.max(right).max(CONTROLLER_CARD_HEIGHT) + SETTINGS_BLOCK_PADDING
+    .y
 }
 
 pub(super) fn settings(
@@ -150,7 +171,10 @@ pub(super) fn settings(
         });
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = ROW_SPACING;
+
+            let gap = left_height() - middle_height(combo_height(ui, "settings-gap-combo"));
             language_combo(ui, config, disabled, actions);
+            ui.add_space(gap.max(0.0));
             let monitors = crate::launcher_gui::monitors::enumerate();
             screen_combo(ui, config, &monitors, disabled, actions);
         });

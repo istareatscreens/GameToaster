@@ -10,8 +10,9 @@ use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{
     CreateProcessW, WaitForSingleObject, CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT,
-    PROCESS_INFORMATION, STARTUPINFOW,
+    PROCESS_INFORMATION, STARTF_USESHOWWINDOW, STARTUPINFOW,
 };
+use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
 use crate::support::paths::same_file;
 use crate::support::process::console_policy::{self, ConsoleSettings};
@@ -19,7 +20,7 @@ use crate::support::process::environment::environment_block;
 use crate::support::process::handle::{creation_time, CreationTime, ProcessHandle};
 use crate::support::process::image::ProgramKind;
 use crate::support::process::invocation::{invocation, Invocation};
-use crate::support::process::tree::direct_children;
+use crate::support::process::tree::{direct_children, end_tree};
 use crate::support::process::ENDED_BY_LAUNCHER;
 use crate::support::win::wide;
 
@@ -86,10 +87,13 @@ impl PluginProcess {
         capture: impl FnOnce() -> Result<(File, File), String>,
     ) -> Result<Self, String> {
         let kind = ProgramKind::of(spec.executable);
-        if spec.console.hides_consoles() || kind == ProgramKind::Graphical {
+        let plan = console_policy::plan(kind, spec.console);
+
+        if kind == ProgramKind::Graphical
+            || (spec.console.hides_consoles() && !plan.pause_on_failure)
+        {
             return Self::start_hidden(spec, capture()?);
         }
-        let plan = console_policy::plan(kind, spec.console);
         let Invocation {
             application,
             mut command_line,
@@ -97,10 +101,14 @@ impl PluginProcess {
         let application = wide(&application);
         let working_directory = wide(spec.working_directory);
         let environment = environment_block(spec.environment);
-        let startup = STARTUPINFOW {
+        let mut startup = STARTUPINFOW {
             cb: size_of::<STARTUPINFOW>() as u32,
             ..Default::default()
         };
+        if plan.window.starts_hidden() {
+            startup.dwFlags |= STARTF_USESHOWWINDOW;
+            startup.wShowWindow = SW_HIDE.0 as u16;
+        }
         let mut information = PROCESS_INFORMATION::default();
         unsafe {
             CreateProcessW(
@@ -187,6 +195,11 @@ impl PluginProcess {
     }
 
     pub fn kill(&mut self) {
+        let (root, created) = (self.id(), self.created);
+        end_tree(root, created, || self.end_root(), END_WAIT_MS);
+    }
+
+    fn end_root(&mut self) {
         match &mut self.root {
             Root::Captured(child) => {
                 let _ = child.kill();
@@ -194,19 +207,8 @@ impl PluginProcess {
             }
             Root::Console(root) => {
                 root.terminate(ENDED_BY_LAUNCHER);
-                let children = if self.wrapped.is_some() {
-                    direct_children(root.pid(), self.created)
-                } else {
-                    Vec::new()
-                };
-                for child in &children {
-                    child.terminate(ENDED_BY_LAUNCHER);
-                }
-
-                for process in std::iter::once(&*root).chain(&children) {
-                    unsafe {
-                        let _ = WaitForSingleObject(process.raw(), END_WAIT_MS);
-                    }
+                unsafe {
+                    let _ = WaitForSingleObject(root.raw(), END_WAIT_MS);
                 }
             }
         }

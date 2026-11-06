@@ -6,13 +6,10 @@ use rust_i18n::t;
 
 use crate::gui::common::components::{self, text, ButtonRole, DialogContent};
 use crate::gui::common::theme;
-use crate::launcher_gui::model::CloseMode;
 use crate::plugin::paths::ManagedFileKind;
 
 use super::drafts::{GameSettingsDraft, PluginInspectionState, StorePicker};
 use super::{plugin_labels, DialogEvent};
-
-const CHOICE_SIZE: egui::Vec2 = egui::Vec2::new(82.0, 26.0);
 
 pub(super) struct GameSettingsDialog<'a> {
     draft: &'a mut GameSettingsDraft,
@@ -40,50 +37,21 @@ impl DialogContent for GameSettingsDialog<'_> {
         super::watch_field::show(ui, &mut draft.watch_exe, &t!("gs.watch_placeholder"));
 
         ui.add_space(12.0);
-        ui.label(RichText::new(t!("gs.close_action").to_string()).strong());
-        ui.horizontal(|ui| {
-            if ui
-                .add(components::choice_button(
-                    t!("gs.kill_game"),
-                    draft.close_mode == CloseMode::KillExe,
-                    CHOICE_SIZE,
-                ))
-                .clicked()
-            {
-                draft.close_mode = CloseMode::KillExe;
-            }
-            if ui
-                .add(components::choice_button(
-                    t!("gs.run_script"),
-                    draft.close_mode == CloseMode::Script,
-                    CHOICE_SIZE,
-                ))
-                .clicked()
-            {
-                draft.close_mode = CloseMode::Script;
-            }
-        });
-        if draft.close_mode == CloseMode::Script {
-            ui.add_space(6.0);
-            let shown = draft
-                .close_script
-                .as_ref()
-                .map(|path| path.display().to_string())
-                .unwrap_or_else(|| t!("gs.no_script").to_string());
-
-            let (_, choose) = components::action_row(ui, t!("gs.choose_bat"), |ui| {
-                ui.add(egui::Label::new(text::path(shown)).truncate())
-            });
-            if choose.clicked() {
-                if let Some(path) = rfd::FileDialog::new()
-                    .set_title(t!("picker.close_script").to_string())
-                    .add_filter(t!("picker.filter_script"), &["bat", "cmd"])
-                    .pick_file()
-                {
-                    draft.close_script = Some(path);
-                }
-            }
-        }
+        script_setting(
+            ui,
+            t!("gs.pre_start_script").to_string(),
+            t!("gs.pre_start_hint").to_string(),
+            t!("picker.pre_start_script").to_string(),
+            &mut draft.pre_start_script,
+        );
+        ui.add_space(12.0);
+        script_setting(
+            ui,
+            t!("gs.close_script").to_string(),
+            t!("gs.close_script_hint").to_string(),
+            t!("picker.close_script").to_string(),
+            &mut draft.close_script,
+        );
 
         ui.add_space(12.0);
         ui.label(RichText::new(t!("gs.config_menu").to_string()).strong());
@@ -138,7 +106,7 @@ impl DialogContent for GameSettingsDialog<'_> {
         }
         ui.horizontal(|ui| {
             if components::action(ui, t!("gs.add_target")).clicked() {
-                if let Some(path) = rfd::FileDialog::new()
+                if let Some(path) = crate::gui::common::file_dialog::file_dialog()
                     .set_title(t!("picker.add_target").to_string())
                     .add_filter(
                         t!("picker.filter_config_or_program"),
@@ -259,19 +227,52 @@ impl DialogContent for GameSettingsDialog<'_> {
     fn actions(&mut self, ui: &mut egui::Ui) {
         let draft = &*self.draft;
         let event = &mut *self.event;
-        let valid = draft.close_mode != CloseMode::Script || draft.close_script.is_some();
         if components::action(ui, t!("common.cancel")).clicked() {
             *event = DialogEvent::Cancel;
         }
-        if components::action_enabled(ui, valid, t!("common.save").to_string()).clicked() {
+
+        let savable = !super::watch_field::names_script(&draft.watch_exe);
+        if components::action_enabled(ui, savable, t!("common.save")).clicked() {
             *event = DialogEvent::SaveGameSettings {
                 id: draft.id,
                 watch_exe: draft.watch_override(),
-                close_mode: draft.close_mode,
+                pre_start_script: draft.pre_start_script.clone(),
                 close_script: draft.close_script.clone(),
                 config_targets: draft.config_targets.clone(),
             };
         }
+    }
+}
+
+fn script_setting(
+    ui: &mut egui::Ui,
+    heading: String,
+    hint: String,
+    picker_title: String,
+    script: &mut Option<PathBuf>,
+) {
+    ui.label(RichText::new(heading).strong());
+    ui.label(text::hint(hint));
+    ui.add_space(4.0);
+    let shown = script
+        .as_ref()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| t!("gs.no_script").to_string());
+
+    let (_, choose) = components::action_row(ui, t!("gs.choose_bat"), |ui| {
+        ui.add(egui::Label::new(text::path(shown)).truncate())
+    });
+    if choose.clicked() {
+        if let Some(path) = crate::gui::common::file_dialog::file_dialog()
+            .set_title(picker_title)
+            .add_filter(t!("picker.filter_script"), &["bat", "cmd"])
+            .pick_file()
+        {
+            *script = Some(path);
+        }
+    }
+    if script.is_some() && components::action(ui, t!("gs.clear_script")).clicked() {
+        *script = None;
     }
 }
 

@@ -162,7 +162,7 @@ fn a_real_process_tree_is_followed_and_a_stranger_is_left_out() {
         );
     };
 
-    tree.refresh();
+    tree.refresh_from(&snapshot());
     for pid in &expected {
         assert!(joined(&tree, *pid), "child {pid} of the root joined");
     }
@@ -181,7 +181,7 @@ fn a_real_process_tree_is_followed_and_a_stranger_is_left_out() {
     let deadline = Instant::now() + Duration::from_secs(10);
     while !tree.running_members().is_empty() {
         assert!(Instant::now() < deadline, "every member ended");
-        tree.refresh();
+        tree.refresh_from(&snapshot());
         std::thread::sleep(Duration::from_millis(50));
     }
 }
@@ -201,4 +201,61 @@ fn a_root_reported_without_a_creation_time_takes_its_own_and_is_followed() {
 
     let _ = root.kill();
     let _ = root.wait();
+}
+
+#[test]
+fn descendants_reach_every_generation_and_leave_strangers_out() {
+    let system = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32");
+
+    let mut root = spawn_hidden(
+        &system.join("cmd.exe"),
+        &["/d", "/c", "cmd /d /c ping -n 30 127.0.0.1 >nul"],
+    );
+    let mut stranger = spawn_hidden(&system.join("PING.EXE"), &["-n", "30", "127.0.0.1"]);
+    let root_created = creation_time(HANDLE(root.as_raw_handle())).unwrap();
+
+    let grandchild = || {
+        let entries = snapshot();
+        let middle: Vec<u32> = entries
+            .iter()
+            .filter(|entry| entry.parent == root.id() && entry.name.eq_ignore_ascii_case("cmd.exe"))
+            .map(|entry| entry.pid)
+            .collect();
+        entries
+            .iter()
+            .find(|entry| {
+                middle.contains(&entry.parent) && entry.name.eq_ignore_ascii_case("PING.EXE")
+            })
+            .map(|entry| entry.pid)
+    };
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let ping = loop {
+        if let Some(pid) = grandchild() {
+            break pid;
+        }
+        assert!(Instant::now() < deadline, "the grandchild never started");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+
+    let found = descendants(root.id(), root_created);
+    let pids: Vec<u32> = found.iter().map(ProcessHandle::pid).collect();
+    assert!(
+        pids.contains(&ping),
+        "the grandchild {ping} is found: {pids:?}"
+    );
+    assert!(!pids.contains(&root.id()), "the root itself is not listed");
+    assert!(!pids.contains(&stranger.id()), "the stranger stays out");
+
+    for handle in &found {
+        assert!(handle.terminate(1));
+    }
+    let _ = root.kill();
+    let _ = root.wait();
+    let _ = stranger.kill();
+    let _ = stranger.wait();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while found.iter().any(|handle| !handle.has_exited()) {
+        assert!(Instant::now() < deadline, "every descendant ended");
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }

@@ -18,6 +18,7 @@ impl LauncherApp {
             result,
             WorkerResult::Internal
                 | WorkerResult::ProgramStarted { .. }
+                | WorkerResult::LaunchStage(_)
                 | WorkerResult::PluginMessage { .. }
                 | WorkerResult::PluginOperationEnded { .. }
                 | WorkerResult::PluginRuntimeEnded { .. }
@@ -85,13 +86,36 @@ impl LauncherApp {
                 }
             }
             WorkerResult::ConfigSavedQuiet => {}
+
+            WorkerResult::HandoffRequired { game_id } => {
+                let answer = match self.launch_handoff.as_ref() {
+                    Some((pending, _)) if *pending == game_id => {
+                        self.controller.complete_game_handoff(game_id)
+                    }
+
+                    _ => Err(rust_i18n::t!("controller.dialog.invalid_spawn").to_string()),
+                };
+                if let Some((_, handoff)) = self.launch_handoff.take() {
+                    handoff.answer(answer.clone());
+                }
+                if let Err(error) = answer {
+                    self.dialog = Some(Dialog::error(
+                        rust_i18n::t!("controller.dialog.release_failed_title").to_string(),
+                        rust_i18n::t!("controller.dialog.release_failed_body", detail => error)
+                            .to_string(),
+                    ));
+                }
+            }
             WorkerResult::Launched {
                 game_id,
                 root_pid,
                 root_created,
                 updated_config,
             } => {
-                self.hide_consoles_of(root_pid, root_created);
+                let close_now = self.launch_flight().close_when_launched(game_id);
+                self.launch_cancel = None;
+                self.launch_handoff = None;
+                self.follow_program(Some(game_id), root_pid, root_created);
                 if let Some(config) = updated_config {
                     self.config = config;
                     self.controller.library_changed(&self.config);
@@ -111,7 +135,10 @@ impl LauncherApp {
                     );
                 }
                 self.controller_running_game = Some(game_id);
-                if self.config.settings.auto_hide_on_launch {
+                if close_now {
+                    self.close_game(game_id);
+                } else if self.config.settings.auto_hide_on_launch || self.is_plugin_game(game_id) {
+                    let plugin = self.is_plugin_game(game_id);
                     let watch = self.config.game(game_id).and_then(|game| {
                         game.watch_target()
                             .filter(|name| !name.trim().is_empty())
@@ -119,20 +146,43 @@ impl LauncherApp {
                     });
                     match watch {
                         Some((watch_exe, watch_path)) => {
-                            self.pending_hide =
-                                Some(PendingHide::new(game_id, watch_exe, watch_path));
+                            let pending = PendingHide::new(game_id, watch_exe, watch_path);
+                            self.pending_hide = Some(if plugin {
+                                pending.for_plugin()
+                            } else {
+                                pending
+                            });
                         }
-                        None => {
+                        None if self.config.settings.auto_hide_on_launch => {
                             context.send_viewport_cmd(egui::ViewportCommand::Visible(false));
                             self.main_visible = false;
                         }
+                        None => {}
                     }
                 }
             }
             WorkerResult::ProgramStarted {
+                game_id,
                 process_id,
                 created,
-            } => self.hide_consoles_of(process_id, created),
+            } => self.follow_program(game_id, process_id, created),
+            WorkerResult::LaunchStage(stage) => {
+                if self.launch_flight().follows_stages() {
+                    self.busy = stage.relabel(self.busy.take());
+                }
+            }
+            WorkerResult::LaunchCancelled { game_id } => {
+                self.launch_cancel = None;
+                self.launch_handoff = None;
+                self.forget_gone(game_id);
+                self.end_console_session(game_id);
+
+                if let Some((_, controller_was_open)) = self.controller_launch_pending.take() {
+                    if self.controller.launch_failed() || controller_was_open {
+                        self.open_controller();
+                    }
+                }
+            }
             WorkerResult::PluginMessage { game_id, message } => {
                 self.plugin_status
                     .entry(game_id)
@@ -144,6 +194,7 @@ impl LauncherApp {
             }
             WorkerResult::PluginRuntimeEnded { game_id, end } => {
                 self.plugin_status.remove(&game_id);
+                self.forget_gone(game_id);
 
                 let launch_confirmed = !self
                     .pending_hide
@@ -254,6 +305,9 @@ impl LauncherApp {
                 }
             }
             WorkerResult::GameExited(game_id) => self.game_ended(game_id, true),
+            WorkerResult::ProgramPresence { game_id, presence } => {
+                self.program_presence(context, game_id, presence)
+            }
             WorkerResult::Closed {
                 game_id,
                 exit_observed,
@@ -278,6 +332,11 @@ impl LauncherApp {
                 }
             },
             WorkerResult::Error { title, message } => {
+                if let Some((game, _)) = self.controller_launch_pending {
+                    self.launch_cancel = None;
+                    self.launch_handoff = None;
+                    self.end_console_session(game);
+                }
                 if let Some((_, controller_was_open)) = self.controller_launch_pending.take() {
                     if self.controller.launch_failed() || controller_was_open {
                         self.open_controller();
@@ -291,6 +350,7 @@ impl LauncherApp {
     pub(super) fn handle_ui_action(&mut self, context: &egui::Context, action: UiAction) {
         match action {
             UiAction::None => {}
+            UiAction::CancelLaunch => self.cancel_launch(),
             UiAction::AddGame => {
                 self.submit(WorkerCommand::PickExecutable, t!("busy.picking_file"));
             }
@@ -363,11 +423,8 @@ impl LauncherApp {
                             ));
                         }
                         1 => {
-                            if let Err(error) = install::open_config_target(&game.config_targets[0])
-                            {
-                                self.dialog =
-                                    Some(Dialog::error(t!("errors.open_config_failed"), error));
-                            }
+                            let target = game.config_targets[0].clone();
+                            self.open_config_target(&target);
                         }
                         _ => self.dialog = Some(Dialog::ConfigMenu(game)),
                     }
@@ -402,7 +459,7 @@ impl LauncherApp {
                         id: game.id,
                         label: game.label,
                         watch_exe,
-                        close_mode: game.close_mode,
+                        pre_start_script: game.pre_start_script,
                         close_script: game.close_script,
                         config_targets: game.config_targets,
                         store_picker: None,
@@ -436,12 +493,20 @@ impl LauncherApp {
                 match key {
                     SettingKey::AutoHide => self.config.settings.auto_hide_on_launch = value,
                     SettingKey::HideCommandWindows => {
-                        self.config.settings.show_command_windows = !value
+                        self.config.settings.show_command_windows = !value;
+
+                        if let Some(console_watch) = &self.console_watch {
+                            console_watch
+                                .set_hiding(self.config.settings.console().hides_consoles());
+                        }
                     }
                     SettingKey::LaunchDefaultOnOpen => {
                         self.config.settings.launch_default_on_open = value
                     }
                     SettingKey::PauseOnFailure => self.config.settings.pause_on_failure = value,
+                    SettingKey::ConfigProgramsOnMainWindow => {
+                        self.config.settings.launch_config_programs_on_main_window = value
+                    }
                     SettingKey::BlockExitOnCredit => {
                         self.config.settings.block_exit_on_credit = value
                     }
@@ -511,6 +576,20 @@ impl LauncherApp {
 
             UiAction::RequestClose => {
                 self.begin_shutdown();
+            }
+        }
+    }
+
+    fn open_config_target(&mut self, target: &std::path::Path) {
+        match install::open_config_target(target) {
+            Ok(Some(process)) if self.config.settings.launch_config_programs_on_main_window => {
+                crate::gui::main_window::services::config_placement::place_over_main_window(
+                    process,
+                );
+            }
+            Ok(_) => {}
+            Err(error) => {
+                self.dialog = Some(Dialog::error(t!("errors.open_config_failed"), error));
             }
         }
     }
@@ -591,7 +670,7 @@ impl LauncherApp {
             DialogEvent::SaveGameSettings {
                 id,
                 watch_exe,
-                close_mode,
+                pre_start_script,
                 close_script,
                 config_targets,
             } => {
@@ -600,7 +679,7 @@ impl LauncherApp {
                 match candidate.games.iter_mut().find(|game| game.id == id) {
                     Some(game) => {
                         game.watch_exe = watch_exe;
-                        game.close_mode = close_mode;
+                        game.pre_start_script = pre_start_script;
                         game.close_script = close_script;
                         game.config_targets = config_targets;
                         self.commit_config(candidate);
@@ -665,9 +744,7 @@ impl LauncherApp {
             }
             DialogEvent::OpenConfigTarget(path) => {
                 self.dialog = None;
-                if let Err(error) = install::open_config_target(&path) {
-                    self.dialog = Some(Dialog::error(t!("errors.open_config_failed"), error));
-                }
+                self.open_config_target(&path);
             }
             DialogEvent::RequestStoreApps => {
                 let (tx, rx) = std::sync::mpsc::channel();

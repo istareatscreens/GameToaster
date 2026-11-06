@@ -1,3 +1,4 @@
+mod cancel_arming;
 mod handoff;
 mod input;
 mod lights;
@@ -10,6 +11,8 @@ mod window;
 
 use std::path::PathBuf;
 use std::time::Instant;
+
+use cancel_arming::CancelArming;
 
 use eframe::egui;
 
@@ -53,6 +56,9 @@ pub(crate) struct ControllerLauncher {
     active_controller_config: Option<ControllerConfig>,
 
     reconnect: Option<ReconnectState>,
+
+    cancel_arming: CancelArming,
+    launch_started: Option<Instant>,
     monitor_watcher: MonitorReturnWatcher,
     monitor_return: MonitorReturnState,
 
@@ -92,6 +98,8 @@ impl ControllerLauncher {
             placement: None,
             active_controller_config: None,
             reconnect: None,
+            cancel_arming: CancelArming::default(),
+            launch_started: None,
             monitor_watcher: MonitorReturnWatcher::new(ctx.clone()),
             monitor_return: MonitorReturnState::Inactive,
             return_retry: None,

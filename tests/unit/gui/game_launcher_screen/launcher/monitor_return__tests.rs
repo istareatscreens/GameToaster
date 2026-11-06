@@ -119,8 +119,9 @@ fn monitor_return_waits_for_game_lifecycle_idle_and_ignores_stale_targets() {
     launcher.open(&screen).unwrap();
     let target = MonitorTarget::from_config(&screen).unwrap();
     assert!(launcher
-        .prepare_game_handoff(GameId(44), ControllerLaunchSource::Controller, false, false,)
+        .begin_game_launch(GameId(44), ControllerLaunchSource::Controller, false, false,)
         .unwrap());
+    launcher.complete_game_handoff(GameId(44)).unwrap();
     launcher.launch_succeeded().unwrap();
 
     launcher.handle_monitor_watch_event(MonitorWatchEvent::Unavailable(target.clone()), &screen);

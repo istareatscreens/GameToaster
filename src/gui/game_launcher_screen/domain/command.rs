@@ -13,6 +13,8 @@ pub(in crate::gui::game_launcher_screen) enum LauncherCommand {
     ToggleMainWindow,
 
     LauncherX,
+
+    CancelLaunch,
 }
 
 impl LauncherCommand {
@@ -20,7 +22,7 @@ impl LauncherCommand {
         match self {
             Self::LauncherX => screen.ba1_enabled,
             Self::ToggleMainWindow => screen.ba2_enabled,
-            Self::Previous | Self::Next | Self::Launch => true,
+            Self::Previous | Self::Next | Self::Launch | Self::CancelLaunch => true,
         }
     }
 }
@@ -31,6 +33,7 @@ pub(crate) enum ControllerLauncherAction {
     ToggleMainWindow,
     HideLauncherToTray,
     ExitLauncher,
+    CancelLaunch,
 }
 
 pub(in crate::gui::game_launcher_screen) fn apply(
@@ -61,6 +64,7 @@ pub(in crate::gui::game_launcher_screen) fn apply(
             LauncherXAction::MinimizeToTray => ControllerLauncherAction::HideLauncherToTray,
             LauncherXAction::ExitLauncher => ControllerLauncherAction::ExitLauncher,
         }),
+        LauncherCommand::CancelLaunch => actions.push(ControllerLauncherAction::CancelLaunch),
     }
 }
 

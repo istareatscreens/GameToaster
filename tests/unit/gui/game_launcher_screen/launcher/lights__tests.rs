@@ -124,7 +124,7 @@ fn starting_a_launch_cancels_a_job_that_is_still_waiting() {
     assert!(launcher.lights_off.is_running());
 
     launcher
-        .prepare_game_handoff(GameId(1), ControllerLaunchSource::MainGui, true, false)
+        .begin_game_launch(GameId(1), ControllerLaunchSource::MainGui, true, false)
         .unwrap();
 
     assert!(

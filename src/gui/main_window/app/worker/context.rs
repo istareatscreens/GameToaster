@@ -20,6 +20,7 @@ use crate::plugin::catalog::Catalog;
 use crate::plugin::deployment::DeploymentEngine;
 use crate::plugin::lifecycle::LifecycleService;
 use crate::plugin::paths::PathPolicy;
+use crate::support::process::handle::CreationTime;
 
 pub(super) struct WorkerContext {
     pub(super) launcher_dir: PathBuf,
@@ -37,6 +38,8 @@ pub(super) struct WorkerContext {
     pub(super) processes: ProcessManager,
     pub(super) active_watches: BTreeMap<GameId, ActiveWatch>,
 
+    console_watch: Option<crate::launcher_gui::process::ConsoleWatchHandle>,
+
     pub(super) pending_plugin_action: Option<PendingPluginAction>,
 }
 
@@ -48,6 +51,7 @@ impl WorkerContext {
         game_state: GameStateHub,
         results: Sender<WorkerResult>,
         internal_sender: SyncSender<WorkerCommand>,
+        console_watch: Option<crate::launcher_gui::process::ConsoleWatchHandle>,
     ) -> Self {
         let config_path = launcher_dir.join(config::FILE_NAME);
         let runtime = RuntimeService::new(launcher_dir.clone());
@@ -91,6 +95,38 @@ impl WorkerContext {
             processes,
             active_watches,
             pending_plugin_action,
+            console_watch,
+        }
+    }
+
+    pub(super) fn report(&self, result: WorkerResult) {
+        if self.results.send(result).is_ok() {
+            self.ctx.request_repaint();
+        }
+    }
+
+    pub(super) fn start_close_script(&self, script: &std::path::Path) -> Result<(), String> {
+        let (process_id, created) = self.runtime.run_close_script(script)?;
+        self.watch_program(None, process_id, created);
+        self.report(WorkerResult::ProgramStarted {
+            game_id: None,
+            process_id,
+            created,
+        });
+        Ok(())
+    }
+
+    pub(super) fn watch_program(
+        &self,
+        game: Option<GameId>,
+        process_id: u32,
+        created: CreationTime,
+    ) {
+        if let Some(console_watch) = &self.console_watch {
+            match game {
+                Some(game) => console_watch.follow_game(game, process_id, created),
+                None => console_watch.follow_transient(process_id, created),
+            }
         }
     }
 
@@ -160,7 +196,12 @@ impl WorkerContext {
                 source,
                 clear_image,
             } => self.save_presentation(config, game_id, label, source, clear_image),
-            WorkerCommand::Launch { game, config } => self.launch(game, config),
+            WorkerCommand::Launch {
+                game,
+                config,
+                cancel,
+                handoff,
+            } => self.launch(game, config, cancel, handoff),
             WorkerCommand::CloseGame { game } => self.close_game(game),
             WorkerCommand::CloseActiveGames { games } => self.close_active_games(games),
             WorkerCommand::RemoveGame { config } => self.remove_game(config),
@@ -169,6 +210,14 @@ impl WorkerContext {
                 return None;
             }
             WorkerCommand::ProcessCompletion(completion) => self.process_completion(completion),
+            WorkerCommand::FollowProgram { game_id } => self.follow_session_program(game_id),
+            WorkerCommand::ProgramPresence { game_id, presence } => {
+                if self.active_watches.contains_key(&game_id) {
+                    WorkerResult::ProgramPresence { game_id, presence }
+                } else {
+                    WorkerResult::Internal
+                }
+            }
             WorkerCommand::WatchEvent(event) => self.watch_event(event),
             WorkerCommand::PluginRuntimeEvent {
                 game_id,

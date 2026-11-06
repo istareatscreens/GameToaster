@@ -71,6 +71,7 @@ impl ControllerLauncher {
         context: &egui::Context,
         config: &LauncherConfig,
         loading_status: Option<&str>,
+        launch_cancellable: bool,
         credit_readout: Option<&str>,
         actions: &mut Vec<ControllerLauncherAction>,
     ) -> bool {
@@ -167,11 +168,12 @@ impl ControllerLauncher {
                         surface_px: local_surface,
                         mode: LauncherFrameMode::Launching {
                             status: loading_status.unwrap_or_default(),
+                            cancellable: launch_cancellable,
                         },
                     };
-                    let _ = layout.render(ui, &frame);
+                    let cancel = layout.render(ui, &frame);
                     let close = ui.ctx().input(|input| input.viewport().close_requested());
-                    return (None, close);
+                    return (cancel, close);
                 }
                 if connecting {
                     ui.ctx().request_repaint_after(Duration::from_millis(33));

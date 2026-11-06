@@ -47,17 +47,7 @@ pub fn run(
     };
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,
-        viewport: egui::ViewportBuilder::default()
-            .with_title("GameToaster")
-            .with_app_id("gametoaster-launcher")
-            .with_inner_size([1080.0, 800.0])
-            .with_min_inner_size([1080.0, 800.0])
-            .with_max_inner_size([1080.0, 800.0])
-            .with_decorations(false)
-            .with_resizable(false)
-            .with_taskbar(false)
-            .with_visible(main_visible_on_start)
-            .with_icon(viewport_icon),
+        viewport: main_viewport(main_visible_on_start, viewport_icon),
         ..Default::default()
     };
     eframe::run_native(
@@ -76,6 +66,20 @@ pub fn run(
         }),
     )
     .map_err(|error| crate::launcher_gui::startup_failure::gui_failure_message(&error.to_string()))
+}
+
+fn main_viewport(visible: bool, icon: egui::IconData) -> egui::ViewportBuilder {
+    egui::ViewportBuilder::default()
+        .with_title(crate::gui::main_window::services::config_placement::MAIN_WINDOW_TITLE)
+        .with_app_id("gametoaster-launcher")
+        .with_inner_size([1080.0, 800.0])
+        .with_min_inner_size([1080.0, 800.0])
+        .with_max_inner_size([1080.0, 800.0])
+        .with_decorations(false)
+        .with_resizable(false)
+        .with_taskbar(true)
+        .with_visible(visible)
+        .with_icon(icon)
 }
 
 fn main_window_starts_visible(

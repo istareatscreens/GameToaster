@@ -29,10 +29,10 @@ fn expect(kind: ProgramKind, settings: ConsoleSettings, window: ConsoleWindow, p
 }
 
 #[test]
-fn consoles_are_hidden_only_while_command_windows_are_hidden_and_pause_is_off() {
+fn auto_hide_alone_decides_whether_consoles_are_hidden() {
     assert!(HIDDEN.hides_consoles());
     assert!(!SHOWN.hides_consoles());
-    assert!(!PAUSE.hides_consoles());
+    assert!(PAUSE.hides_consoles(), "pause no longer shows consoles");
     assert!(!SHOWN_AND_PAUSE.hides_consoles());
 }
 
@@ -40,7 +40,8 @@ fn consoles_are_hidden_only_while_command_windows_are_hidden_and_pause_is_off() 
 fn a_script_runs_in_a_hidden_window_or_a_shown_one_and_pauses_when_asked() {
     expect(ProgramKind::Script, HIDDEN, ConsoleWindow::Hidden, false);
     expect(ProgramKind::Script, SHOWN, ConsoleWindow::Shown, false);
-    expect(ProgramKind::Script, PAUSE, ConsoleWindow::Shown, true);
+
+    expect(ProgramKind::Script, PAUSE, ConsoleWindow::Hidden, true);
     expect(
         ProgramKind::Script,
         SHOWN_AND_PAUSE,
@@ -58,7 +59,8 @@ fn a_console_program_has_no_window_or_a_shown_one_and_pauses_when_asked() {
         false,
     );
     expect(ProgramKind::Console, SHOWN, ConsoleWindow::Shown, false);
-    expect(ProgramKind::Console, PAUSE, ConsoleWindow::Shown, true);
+
+    expect(ProgramKind::Console, PAUSE, ConsoleWindow::Hidden, true);
     expect(
         ProgramKind::Console,
         SHOWN_AND_PAUSE,
@@ -84,7 +86,7 @@ fn a_graphical_program_starts_as_before_and_never_pauses() {
     expect(
         ProgramKind::Graphical,
         PAUSE,
-        ConsoleWindow::Graphical,
+        ConsoleWindow::Windowless,
         false,
     );
     expect(

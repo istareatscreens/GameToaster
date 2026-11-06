@@ -1,5 +1,6 @@
 use super::super::controller::{Button, ButtonWord, ManagerEvent};
 use super::super::domain::command;
+use super::super::domain::command::LauncherCommand;
 use super::super::ui::settings::{LiveButtons, TestStatus};
 use super::super::{ControllerLauncherAction, ControllerScreenConfig};
 use super::status::ControllerStatus;
@@ -9,6 +10,7 @@ impl ControllerLauncher {
     pub(crate) fn poll(
         &mut self,
         config: &ControllerScreenConfig,
+        launch_cancellable: bool,
     ) -> Vec<ControllerLauncherAction> {
         self.poll_monitor_watcher(config);
 
@@ -46,11 +48,28 @@ impl ControllerLauncher {
                     button,
                     pressed: true,
                 } => {
-                    if let Some(command) = self.manager.command_for(button) {
+                    let command = self.manager.command_for(button);
+                    if self.launch_in_progress() {
+                        if command == Some(LauncherCommand::Launch)
+                            && launch_cancellable
+                            && self.cancel_arming.may_cancel()
+                        {
+                            actions.push(ControllerLauncherAction::CancelLaunch);
+                        }
+                    } else if let Some(command) = command {
                         command::apply(command, config, &mut self.games, &mut actions);
                     }
                 }
-                ManagerEvent::Edge { pressed: false, .. } => {}
+                ManagerEvent::Edge {
+                    button,
+                    pressed: false,
+                } => {
+                    if self.manager.command_for(button) == Some(LauncherCommand::Launch) {
+                        if let Some(started) = self.launch_started {
+                            self.cancel_arming.released(started.elapsed());
+                        }
+                    }
+                }
             }
         }
         actions

@@ -6,6 +6,54 @@ use super::WashingMachineLayout;
 use crate::gui::common::theme;
 use crate::launcher_gui::model::LauncherConfig;
 
+fn clickable(ui: &egui::Ui, rect: egui::Rect, id: impl std::hash::Hash) -> egui::Response {
+    ui.interact(rect, ui.id().with(id), Sense::click())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn affordance(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    radius: f32,
+    scale: f32,
+    angle_deg: f32,
+    icon: &str,
+    id: impl std::hash::Hash,
+) -> bool {
+    let (outline, lobe_center, lobe_r) = teardrop(center, angle_deg, radius, scale);
+    let hit = egui::Rect::from_center_size(lobe_center, Vec2::splat(lobe_r * 2.0));
+    let response = clickable(ui, hit, id);
+    let fill = if response.hovered() {
+        theme::PRIMARY_ORANGE
+    } else {
+        theme::SKY_BOTTOM
+    };
+    painter.add(egui::Shape::convex_polygon(
+        outline,
+        fill,
+        Stroke::new((2.0 * scale).max(1.0), theme::BORDER_COLOR),
+    ));
+    painter.text(
+        lobe_center,
+        egui::Align2::CENTER_CENTER,
+        icon,
+        FontId::proportional(lobe_r * 1.05),
+        theme::PATH_BLUE,
+    );
+    response.clicked()
+}
+
+pub(super) fn launching_control(cancellable: bool) -> Option<(f32, &'static str, LauncherCommand)> {
+    if !cancellable {
+        return None;
+    }
+    edge_controls()
+        .into_iter()
+        .find(|(_, _, action)| *action == LauncherCommand::Launch)
+        .map(|(angle, _, _)| (angle, icons::X, LauncherCommand::CancelLaunch))
+}
+
 pub(super) fn edge_controls() -> [(f32, &'static str, LauncherCommand); 5] {
     [
         (-157.5, icons::ARROW_UP, LauncherCommand::Previous),
@@ -60,36 +108,26 @@ impl WashingMachineLayout {
             if !action.enabled(screen) {
                 continue;
             }
-            let (outline, lobe_center, lobe_r) = teardrop(center, angle_deg, radius, scale);
-            let hit = egui::Rect::from_center_size(lobe_center, Vec2::splat(lobe_r * 2.0));
-            let response = ui.interact(
-                hit,
-                ui.id().with(("cls-edge", action as u8)),
-                Sense::click(),
-            );
-            let fill = if response.hovered() {
-                theme::PRIMARY_ORANGE
-            } else {
-                theme::SKY_BOTTOM
-            };
-            painter.add(egui::Shape::convex_polygon(
-                outline,
-                fill,
-                Stroke::new((2.0 * scale).max(1.0), theme::BORDER_COLOR),
-            ));
-            painter.text(
-                lobe_center,
-                egui::Align2::CENTER_CENTER,
-                icon,
-                FontId::proportional(lobe_r * 1.05),
-                theme::PATH_BLUE,
-            );
-            if response.clicked() {
+            let id = ("cls-edge", action as u8);
+            if affordance(ui, painter, center, radius, scale, angle_deg, icon, id) {
                 clicked = Some(action);
             }
         }
         clicked
     }
+}
+
+pub(super) fn render_launching_control(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    radius: f32,
+    scale: f32,
+    cancellable: bool,
+) -> Option<LauncherCommand> {
+    let (angle_deg, icon, action) = launching_control(cancellable)?;
+    let id = ("cls-launching", action as u8);
+    affordance(ui, painter, center, radius, scale, angle_deg, icon, id).then_some(action)
 }
 
 #[cfg(test)]

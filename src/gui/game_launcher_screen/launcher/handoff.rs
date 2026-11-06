@@ -6,6 +6,8 @@ use super::super::lifecycle::coordinator::Action as LifecycleAction;
 use super::super::ControllerLaunchSource;
 use super::status::ControllerStatus;
 use super::ControllerLauncher;
+use std::time::Instant;
+
 use crate::launcher_gui::model::GameId;
 
 impl ControllerLauncher {
@@ -13,7 +15,7 @@ impl ControllerLauncher {
         self.lifecycle.state() != lifecycle::coordinator::State::Idle
     }
 
-    pub(crate) fn prepare_game_handoff(
+    pub(crate) fn begin_game_launch(
         &mut self,
         game: GameId,
         source: ControllerLaunchSource,
@@ -27,15 +29,28 @@ impl ControllerLauncher {
         self.lifecycle.set_always_reopen(always_reopen);
         self.lifecycle.request_launch(game, source, was_open)?;
         self.diagnostics.transition(
-            "handoff-begin",
+            "launch-begin",
             format!("game={game};source={source:?};viewport_open={was_open}"),
         );
         self.open = false;
         self.suspended = false;
         self.reconnect = None;
 
+        self.cancel_arming.begin();
+        self.launch_started = Some(Instant::now());
+
         self.placement = None;
 
+        Ok(was_open)
+    }
+
+    pub(crate) fn complete_game_handoff(&mut self, game: GameId) -> Result<(), String> {
+        match self.lifecycle.begin_handoff() {
+            Ok(_) => {}
+            Err(error) => return Err(error),
+        }
+        self.diagnostics
+            .transition("handoff-begin", format!("game={game}"));
         self.layouts.release_resources();
         match self.manager.disconnect(RELEASE_TIMEOUT) {
             Ok(proof) if proof.open_handles == 0 && proof.live_readers == 0 => {
@@ -49,10 +64,9 @@ impl ControllerLauncher {
                 self.status = ControllerStatus::Released;
                 self.diagnostics
                     .transition("handoff-complete", "handles=0;readers=0");
-                Ok(was_open)
+                Ok(())
             }
             Ok(proof) => {
-                self.open = was_open;
                 self.lifecycle.launch_failed();
                 Err(t!(
                     "controller.status.handoff_failed",
@@ -62,7 +76,6 @@ impl ControllerLauncher {
                 .to_string())
             }
             Err(error) => {
-                self.open = was_open;
                 self.lifecycle.launch_failed();
                 Err(error)
             }

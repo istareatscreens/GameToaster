@@ -5,7 +5,7 @@ use rust_i18n::t;
 
 use crate::gui::common::components::ModalDialog;
 use crate::launcher_gui::hotkeys::Hotkey;
-use crate::launcher_gui::model::{CloseMode, GameEntry, GameId};
+use crate::launcher_gui::model::{GameEntry, GameId};
 
 mod add;
 mod config_notice;
@@ -65,7 +65,7 @@ pub enum DialogEvent {
     SaveGameSettings {
         id: GameId,
         watch_exe: Option<String>,
-        close_mode: CloseMode,
+        pre_start_script: Option<PathBuf>,
         close_script: Option<PathBuf>,
         config_targets: Vec<PathBuf>,
     },

@@ -1,4 +1,5 @@
 pub(super) mod circle;
+pub(super) mod main_window;
 
 use super::display::geometry::PixelRect;
 use super::display::monitor::MonitorDescriptor;

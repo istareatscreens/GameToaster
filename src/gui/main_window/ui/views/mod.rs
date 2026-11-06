@@ -41,6 +41,8 @@ pub enum SettingKey {
     LaunchDefaultOnOpen,
     PauseOnFailure,
 
+    ConfigProgramsOnMainWindow,
+
     BlockExitOnCredit,
 
     ControllerEnabled,
@@ -49,6 +51,8 @@ pub enum SettingKey {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UiAction {
     None,
+
+    CancelLaunch,
     AddGame,
     Plugins,
     OpenHotkeys,
@@ -107,6 +111,7 @@ pub fn main_content(
     config: &LauncherConfig,
     plugin_status: &BTreeMap<GameId, RuntimeStatus>,
     busy: Option<&str>,
+    launch_cancellable: bool,
     controller_open: bool,
     controller_status: &str,
 ) -> Vec<UiAction> {
@@ -124,7 +129,7 @@ pub fn main_content(
                 theme::SKY_TOP,
                 theme::SKY_BOTTOM,
             );
-            add_game_bar(ui, busy, &mut actions).discard();
+            add_game_bar(ui, busy, launch_cancellable, &mut actions).discard();
             ui.add_space(14.0);
 
             let settings_height = settings::reserved_height(ui);

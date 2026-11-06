@@ -627,3 +627,43 @@ fn canonical_verbatim_path_starts_verification_at_complete_volume_root() {
         "handle normalization must retain the selected directory"
     );
 }
+
+#[test]
+fn a_script_is_never_resolved_as_the_watch_target() {
+    let (root, package, game) = setup();
+    fs::write(game.join("start.bat"), b"@echo off").unwrap();
+
+    let mut watched = manifest(Vec::new(), Vec::new());
+    watched.executable_watch = None;
+    watched.executable_watch_type = Some(WatchType::GameDirectory);
+    let plan = build_plan(
+        &package,
+        &watched,
+        &"7".repeat(64),
+        1,
+        &game.join("start.bat"),
+        &ResolutionChoices::default(),
+        &policy(root.path()),
+    )
+    .unwrap();
+    assert_eq!(plan.resolved_watch_target, None);
+
+    for watch_type in [WatchType::GameDirectory, WatchType::FindInDirectory] {
+        watched.executable_watch = Some("launch.cmd".into());
+        watched.executable_watch_type = Some(watch_type);
+        let error = build_plan(
+            &package,
+            &watched,
+            &"8".repeat(64),
+            1,
+            &game.join("game.exe"),
+            &ResolutionChoices::default(),
+            &policy(root.path()),
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("cannot be watched"),
+            "{watch_type:?}: {error}"
+        );
+    }
+}

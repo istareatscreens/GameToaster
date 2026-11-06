@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::thread::JoinHandle;
 
 use rust_i18n::t;
@@ -5,10 +6,12 @@ use rust_i18n::t;
 use super::context::WorkerContext;
 use super::messages::WorkerResult;
 use super::plugin_runtime::log_runtime_event;
+use super::program_watch::ProgramWatch;
 use crate::launcher_gui::model::GameId;
 use crate::launcher_gui::process::ProcessCompletion;
 use crate::plugin::lifecycle::{ManagedGameActivity, PreparedLaunch};
 use crate::plugin::runtime::{OperationCancel, RuntimeEvent};
+use crate::support::process::handle::CreationTime;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum CompletionPolicy {
@@ -19,6 +22,21 @@ pub(super) enum CompletionPolicy {
     FailedWatch,
 
     PluginRuntime,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct WatchedProgram {
+    pub(super) name: String,
+    pub(super) path: Option<PathBuf>,
+}
+
+impl WatchedProgram {
+    pub(super) fn is_running(&self) -> bool {
+        match &self.path {
+            Some(path) => crate::launcher_gui::process::is_process_path_running(path),
+            None => crate::launcher_gui::process::is_process_running(&self.name),
+        }
+    }
 }
 
 pub(super) struct ActiveWatch {
@@ -33,7 +51,17 @@ pub(super) struct ActiveWatch {
     pub(super) _plugin_activity: Option<PreparedLaunch>,
     pub(super) _generic_activity: Option<ManagedGameActivity>,
     pub(super) plugin_cancel: Option<OperationCancel>,
+
+    pub(super) plugin_root: Option<(u32, CreationTime)>,
     pub(super) runtime_thread: Option<JoinHandle<()>>,
+
+    pub(super) label: String,
+
+    pub(super) close_script: Option<PathBuf>,
+
+    pub(super) watched: Option<WatchedProgram>,
+
+    pub(super) program_watch: Option<ProgramWatch>,
 }
 
 impl ActiveWatch {
@@ -184,6 +212,29 @@ impl WorkerContext {
         }
     }
 
+    pub(super) fn follow_session_program(&mut self, game_id: GameId) -> WorkerResult {
+        let program = self
+            .active_watches
+            .get(&game_id)
+            .filter(|watch| watch.plugin_cancel.is_some() && watch.program_watch.is_none())
+            .and_then(|watch| watch.watched.clone());
+        let Some(program) = program else {
+            return WorkerResult::Internal;
+        };
+        match ProgramWatch::start(game_id, program, self.internal_sender.clone()) {
+            Ok(follow) => {
+                if let Some(watch) = self.active_watches.get_mut(&game_id) {
+                    watch.program_watch = Some(follow);
+                }
+            }
+            Err(error) => self.log.event(
+                "program-watch-error",
+                &[("game_id", game_id.to_string()), ("error", error)],
+            ),
+        }
+        WorkerResult::Internal
+    }
+
     pub(super) fn shutdown(&mut self) {
         for watch in self.active_watches.values() {
             if let Some(cancel) = &watch.plugin_cancel {
@@ -191,13 +242,39 @@ impl WorkerContext {
             }
         }
         let watches = std::mem::take(&mut self.active_watches);
-        for (_, mut watch) in watches {
+        let mut endings = Vec::new();
+        for (game_id, mut watch) in watches {
             if let Some(runtime_thread) = watch.runtime_thread.take() {
                 let _ = runtime_thread.join();
+            }
+            if let Some(script) = watch.close_script.take() {
+                endings.push((
+                    game_id,
+                    script,
+                    watch.watched.take(),
+                    watch.plugin_cancel.is_some(),
+                ));
             }
         }
         self.game_state.clear();
         let result = self.processes.shutdown();
+
+        for (game_id, script, watched, plugin) in endings {
+            let gone = match (&watched, plugin) {
+                (Some(program), _) => !program.is_running(),
+                (None, false) => result.is_ok(),
+                (None, true) => false,
+            };
+            if !gone {
+                continue;
+            }
+            if let Err(error) = self.start_close_script(&script) {
+                self.log.event(
+                    "close-script-error",
+                    &[("game_id", game_id.to_string()), ("error", error)],
+                );
+            }
+        }
         let _ = self.results.send(WorkerResult::ShutdownComplete(result));
 
         self.ctx.request_repaint();
@@ -215,12 +292,30 @@ impl WorkerContext {
             })
             .collect();
         for game_id in ready {
+            let mut ending = None;
+            let mut policy = None;
             if let Some(mut watch) = self.active_watches.remove(&game_id) {
                 if let Some(runtime_thread) = watch.runtime_thread.take() {
                     let _ = runtime_thread.join();
                 }
+                policy = Some(watch.policy);
+                ending = watch
+                    .close_script
+                    .take()
+                    .map(|script| (script, std::mem::take(&mut watch.label)));
             }
             self.game_state.clear();
+
+            self.log.event(
+                "session-end",
+                &[
+                    ("game_id", game_id.to_string()),
+                    (
+                        "policy",
+                        policy.map_or_else(|| "none".into(), |policy| format!("{policy:?}")),
+                    ),
+                ],
+            );
             if self
                 .results
                 .send(WorkerResult::GameExited(game_id))
@@ -230,6 +325,15 @@ impl WorkerContext {
             }
 
             self.ctx.request_repaint();
+
+            if let Some((script, label)) = ending {
+                if let Err(message) = self.start_close_script(&script) {
+                    self.report(WorkerResult::Error {
+                        title: t!("errors.close_script_failed", game => label).to_string(),
+                        message,
+                    });
+                }
+            }
         }
     }
 }

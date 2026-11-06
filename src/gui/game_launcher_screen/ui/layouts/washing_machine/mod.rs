@@ -21,8 +21,10 @@ use metrics::{
 };
 use pills::{paint_credit_readout, paint_loading_status};
 
+pub(in crate::gui::game_launcher_screen) const ID: &str = "washing-machine";
+
 static WASHING_MACHINE: LauncherLayoutDescriptor = LauncherLayoutDescriptor {
-    id: "washing-machine",
+    id: ID,
     label_key: "controller.layout.washing_machine",
     surface: SurfaceShape::Circle,
 };
@@ -50,10 +52,10 @@ impl LauncherScreenLayout for WashingMachineLayout {
             LauncherFrameMode::Menu { credit_readout } => {
                 WashingMachineLayout::render(self, ui, frame, credit_readout)
             }
-            LauncherFrameMode::Launching { status } => {
-                WashingMachineLayout::render_launching(self, ui, frame, status);
-                None
-            }
+            LauncherFrameMode::Launching {
+                status,
+                cancellable,
+            } => WashingMachineLayout::render_launching(self, ui, frame, status, cancellable),
         }
     }
 
@@ -85,7 +87,13 @@ impl WashingMachineLayout {
         self.cache.artwork_count()
     }
 
-    pub fn render_launching(&mut self, ui: &mut egui::Ui, frame: &LauncherFrame<'_>, status: &str) {
+    pub fn render_launching(
+        &mut self,
+        ui: &mut egui::Ui,
+        frame: &LauncherFrame<'_>,
+        status: &str,
+        cancellable: bool,
+    ) -> Option<LauncherCommand> {
         let (circle, scale) = circle_layout(ui, frame.surface_px);
         let center = circle.center();
         let radius = circle.width() / 2.0;
@@ -100,6 +108,7 @@ impl WashingMachineLayout {
             scale,
         );
         paint_loading_status(&painter, center, radius, scale, status);
+        affordances::render_launching_control(ui, &painter, center, radius, scale, cancellable)
     }
 
     pub fn render(

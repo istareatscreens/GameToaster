@@ -20,37 +20,6 @@ impl fmt::Display for GameId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum CloseMode {
-    #[default]
-    KillExe,
-
-    Script,
-}
-
-impl fmt::Display for CloseMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::KillExe => "kill",
-            Self::Script => "script",
-        })
-    }
-}
-
-impl FromStr for CloseMode {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "kill" | "kill-exe" | "killexe" => Ok(Self::KillExe),
-            "script" | "bat" => Ok(Self::Script),
-            _ => Err(format!(
-                "unknown close mode '{value}' (expected kill or script)"
-            )),
-        }
-    }
-}
-
 enum WatchSource<'a> {
     Named(&'a str),
 
@@ -87,7 +56,7 @@ pub struct GameEntry {
 
     pub watch_exe: Option<String>,
 
-    pub close_mode: CloseMode,
+    pub pre_start_script: Option<PathBuf>,
 
     pub close_script: Option<PathBuf>,
 
@@ -156,11 +125,15 @@ impl GameEntry {
     }
 
     fn watch_source(&self) -> Option<WatchSource<'_>> {
-        let stored = self.stored_watch();
+        use crate::support::process::image::is_script;
+        let stored = self
+            .stored_watch()
+            .filter(|name| !is_script(std::path::Path::new(name)));
         let plugin = self
             .plugin
             .as_ref()
-            .and_then(|assignment| assignment.resolved_watch_target.as_deref());
+            .and_then(|assignment| assignment.resolved_watch_target.as_deref())
+            .filter(|path| !is_script(path));
         match (stored, plugin) {
             (Some(name), _) if !self.is_automatic_watch(name) => Some(WatchSource::Named(name)),
             (_, Some(path)) => Some(WatchSource::Plugin(path)),
@@ -177,32 +150,24 @@ impl GameEntry {
     }
 
     pub fn close_plan(&self) -> ClosePlan {
-        match self.close_mode {
-            CloseMode::Script => match &self.close_script {
-                Some(script) => ClosePlan::RunScript(script.clone()),
+        if let Some(watch) = self
+            .watch_exe
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            ClosePlan::Kill(watch.to_string())
+        } else if !is_script(&self.selected_target) {
+            match self
+                .selected_target
+                .file_name()
+                .and_then(|name| name.to_str())
+            {
+                Some(name) => ClosePlan::Kill(name.to_string()),
                 None => ClosePlan::Nothing,
-            },
-            CloseMode::KillExe => {
-                if let Some(watch) = self
-                    .watch_exe
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                {
-                    ClosePlan::Kill(watch.to_string())
-                } else if !is_script(&self.selected_target) {
-                    match self
-                        .selected_target
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                    {
-                        Some(name) => ClosePlan::Kill(name.to_string()),
-                        None => ClosePlan::Nothing,
-                    }
-                } else {
-                    ClosePlan::Nothing
-                }
             }
+        } else {
+            ClosePlan::Nothing
         }
     }
 }
@@ -316,8 +281,6 @@ impl PluginAssignment {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ClosePlan {
-    RunScript(PathBuf),
-
     Kill(String),
 
     Nothing,
@@ -334,6 +297,8 @@ pub struct LauncherSettings {
     pub block_exit_on_credit: bool,
 
     pub pause_on_failure: bool,
+
+    pub launch_config_programs_on_main_window: bool,
 
     pub language: String,
 
@@ -362,6 +327,7 @@ impl Default for LauncherSettings {
             diagnostics_logging: false,
             block_exit_on_credit: false,
             pause_on_failure: false,
+            launch_config_programs_on_main_window: false,
             language: String::new(),
             adapter: None,
             launcher_hotkey: Some(crate::launcher_gui::hotkeys::default_launcher_hotkey()),

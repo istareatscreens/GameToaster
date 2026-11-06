@@ -13,17 +13,25 @@ pub(super) struct AddBarResponses {
     add_game: egui::Response,
     plugins: egui::Response,
     hotkeys: egui::Response,
+
+    cancel_launch: Option<egui::Response>,
 }
 
 impl AddBarResponses {
     pub(super) fn discard(self) {
-        drop((self.add_game, self.plugins, self.hotkeys));
+        drop((
+            self.add_game,
+            self.plugins,
+            self.hotkeys,
+            self.cancel_launch,
+        ));
     }
 }
 
 pub(super) fn add_game_bar(
     ui: &mut egui::Ui,
     busy: Option<&str>,
+    launch_cancellable: bool,
     actions: &mut Vec<UiAction>,
 ) -> AddBarResponses {
     let mut responses = None;
@@ -67,15 +75,41 @@ pub(super) fn add_game_bar(
         if hotkeys.clicked() {
             actions.push(UiAction::OpenHotkeys);
         }
+
+        let cancel_launch = launch_cancellable.then(|| {
+            ui.add_space(10.0);
+            ui.add(
+                crate::gui::common::components::button(
+                    RichText::new(format!(
+                        "{}  {}",
+                        icons::X_CIRCLE,
+                        t!("action.cancel_launch")
+                    ))
+                    .size(theme::font_size::MEDIUM),
+                    ButtonRole::Destructive,
+                )
+                .min_size(Vec2::new(150.0, ADD_BUTTON_HEIGHT)),
+            )
+        });
+        if cancel_launch
+            .as_ref()
+            .is_some_and(|response| response.clicked())
+        {
+            actions.push(UiAction::CancelLaunch);
+        }
         if let Some(label) = busy {
             ui.add_space(12.0);
             ui.spinner();
-            ui.label(crate::gui::common::components::text::status(label));
+
+            ui.add(
+                egui::Label::new(crate::gui::common::components::text::status(label)).truncate(),
+            );
         }
         responses = Some(AddBarResponses {
             add_game,
             plugins,
             hotkeys,
+            cancel_launch,
         });
     });
     responses.expect("add-game bar must render its primary controls")

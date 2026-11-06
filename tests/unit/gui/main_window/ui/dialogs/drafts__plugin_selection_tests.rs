@@ -59,7 +59,7 @@ fn game_settings_selection_uses_only_the_chosen_revision_and_policy() {
         id: GameId(7),
         label: "Game".into(),
         watch_exe: String::new(),
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         config_targets: Vec::new(),
         store_picker: None,
@@ -88,7 +88,7 @@ fn watch_draft(watch_exe: &str, resolved: Option<&str>) -> GameSettingsDraft {
         id: GameId(7),
         label: "Game".into(),
         watch_exe: watch_exe.into(),
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         config_targets: Vec::new(),
         store_picker: None,
@@ -293,7 +293,8 @@ fn add_game_entry_carries_only_the_override_and_leaves_the_plugin_to_the_workflo
     assert_eq!(entry.watch_exe.as_deref(), Some("other.exe"));
     assert!(entry.plugin.is_none());
     assert!(entry.config_targets.is_empty());
-    assert_eq!(entry.close_mode, CloseMode::KillExe);
+    assert_eq!(entry.pre_start_script, None);
+    assert_eq!(entry.close_script, None);
 
     let derived = add_draft(r"C:\games\game.exe", Some(descriptor()), "game.exe");
     assert_eq!(derived.game_entry(GameId(1)).watch_exe, None);
@@ -331,9 +332,25 @@ fn game_settings_keeps_a_stored_automatic_name_under_a_plugin_and_clearing_drops
         watch_to_store("client.exe", Some("game.exe"), Some("client.exe"), None),
         None
     );
+}
 
+#[test]
+fn a_batch_file_with_a_plugin_that_names_no_watch_executable_leaves_the_field_empty() {
+    for script in [r"C:\games\start.bat", r"C:\games\START.CMD"] {
+        let mut draft = add_draft(script, Some(descriptor()), "");
+        assert_eq!(draft.resolved_watch_name(), None, "{script}");
+        draft.sync_watch_default();
+        assert_eq!(draft.watch_exe, "", "{script}");
+        assert_eq!(draft.game_entry(GameId(2)).watch_exe, None, "{script}");
+    }
+
+    let draft = add_draft(
+        r"C:\games\start.bat",
+        Some(descriptor_watching("bin/patched_game.exe")),
+        "",
+    );
     assert_eq!(
-        watch_to_store("start.bat", None, None, None).as_deref(),
-        Some("start.bat")
+        draft.resolved_watch_name().as_deref(),
+        Some("patched_game.exe")
     );
 }

@@ -3,7 +3,9 @@ use std::path::Path;
 
 use super::interpreter::{interpreter_command_line, program_line};
 
-const ON_FAILURE: &str = "(pause & call exit %^errorlevel%)";
+pub const PAUSED_TITLE: &str = "GameToaster: launch failure";
+
+const ON_FAILURE: &str = "(title GameToaster: launch failure & pause & call exit %^errorlevel%)";
 
 pub fn paused_command_line(
     shell: &Path,

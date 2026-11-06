@@ -98,6 +98,26 @@ impl OperationCancel {
     }
 }
 
+#[cfg(test)]
+impl OperationCancel {
+    pub(crate) fn standalone() -> Self {
+        let event = unsafe { CreateEventW(None, true, false, None) }
+            .expect("a test's cancellation event is created");
+        Self {
+            inner: Arc::new(CancelEvent {
+                handle: event.0 as usize,
+            }),
+        }
+    }
+
+    pub(crate) fn was_cancelled(&self) -> bool {
+        unsafe {
+            windows::Win32::System::Threading::WaitForSingleObject(handle(self.inner.handle), 0)
+                == WAIT_OBJECT_0
+        }
+    }
+}
+
 impl Drop for CancelEvent {
     fn drop(&mut self) {
         unsafe {
@@ -357,8 +377,12 @@ const OUTPUT_TAIL_LIMIT: u64 = 16 * 1024;
 
 fn read_child_output(request_file: &RequestFile) -> Option<String> {
     let (stdout_path, stderr_path) = request_file.output_paths();
-    let stderr = read_output_tail(stderr_path, OUTPUT_TAIL_LIMIT).unwrap_or_default();
-    let remaining = OUTPUT_TAIL_LIMIT.saturating_sub(stderr.len() as u64);
+    output_tail(stdout_path, stderr_path, OUTPUT_TAIL_LIMIT)
+}
+
+pub(crate) fn output_tail(stdout_path: &Path, stderr_path: &Path, limit: u64) -> Option<String> {
+    let stderr = read_output_tail(stderr_path, limit).unwrap_or_default();
+    let remaining = limit.saturating_sub(stderr.len() as u64);
     let stdout = if remaining == 0 {
         String::new()
     } else {

@@ -16,15 +16,20 @@ use super::LauncherApp;
 
 impl LauncherApp {
     fn loading_status(&self) -> Option<String> {
-        self.busy.clone().or_else(|| {
-            self.pending_hide
-                .as_ref()
-                .map(|pending| t!("status.loading", exe => pending.watch_exe.as_str()).to_string())
-        })
+        self.busy
+            .clone()
+            .or_else(|| self.pending_hide.as_ref().map(|pending| pending.status()))
+            .or_else(|| {
+                self.gone_game
+                    .map(|_| t!("errors.game_no_longer_running").to_string())
+            })
     }
 
     fn controller_launch_status(&self) -> Option<String> {
-        if self.controller_launch_pending.is_some() || self.pending_hide.is_some() {
+        if self.controller_launch_pending.is_some()
+            || self.pending_hide.is_some()
+            || self.gone_game.is_some()
+        {
             self.loading_status()
         } else {
             None
@@ -102,9 +107,10 @@ impl eframe::App for LauncherApp {
             }
         }
 
+        let launch_cancellable = self.launch_flight().cancellable();
         for action in self
             .controller
-            .poll(&self.config.settings.controller_screen)
+            .poll(&self.config.settings.controller_screen, launch_cancellable)
         {
             if self.controller.is_suspended()
                 && !matches!(
@@ -221,28 +227,45 @@ impl eframe::App for LauncherApp {
         if let Some(mut pending) = self.pending_hide.take() {
             match pending.tick() {
                 HideTick::Wait => {
+                    let again = if pending.has_failed() {
+                        Duration::from_secs(1)
+                    } else {
+                        Duration::from_millis(250)
+                    };
                     self.pending_hide = Some(pending);
-                    context.request_repaint_after(Duration::from_millis(250));
+                    context.request_repaint_after(again);
                 }
                 HideTick::Confirmed => {
-                    context.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                    self.main_visible = false;
+                    if pending.reported_by(self.dialog.as_ref()) {
+                        self.dialog = None;
+                    }
+
+                    if pending.follows_after_confirmation() {
+                        let _ = self.worker.try_send(WorkerCommand::FollowProgram {
+                            game_id: pending.game_id,
+                        });
+                    }
+                    if self.config.settings.auto_hide_on_launch {
+                        context.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                        self.main_visible = false;
+                    }
                 }
                 HideTick::Failed(message) => {
                     self.dialog = Some(Dialog::error(t!("errors.game_did_not_start"), message));
+
+                    if !self.main_visible {
+                        self.show_centered(context);
+                    }
+                    self.pending_hide = Some(pending);
+                    context.request_repaint_after(Duration::from_secs(1));
                 }
             }
         }
 
-        if super::console_hider::tick(
-            &mut self.pending_console_hide,
-            self.config.settings.console(),
-        ) {
-            context.request_repaint_after(Duration::from_millis(250));
-        }
-
         if self.center_frames > 0 {
-            if let Some(index) = self.config.settings.adapter {
+            if let Some(position) = self.circle_position(context) {
+                context.send_viewport_cmd(egui::ViewportCommand::OuterPosition(position));
+            } else if let Some(index) = self.config.settings.adapter {
                 self.move_to_adapter(context, index);
             } else if let Some(command) = egui::ViewportCommand::center_on_screen(context) {
                 context.send_viewport_cmd(command);
@@ -285,12 +308,14 @@ impl eframe::App for LauncherApp {
             }
         }
         let controller_status = self.controller_launch_status();
+        let launch_cancellable = self.launch_flight().cancellable();
         let controller_credits = self.controller_credit_readout();
         let mut screen_actions = Vec::new();
         let shutdown = self.controller.render(
             context,
             &self.config,
             controller_status.as_deref(),
+            launch_cancellable,
             controller_credits.as_deref(),
             &mut screen_actions,
         );
@@ -337,6 +362,7 @@ impl eframe::App for LauncherApp {
             &self.config,
             &self.plugin_status,
             status.as_deref(),
+            self.launch_flight().cancellable(),
             self.controller.is_open(),
             &self.controller.status(),
         );

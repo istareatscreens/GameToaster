@@ -39,6 +39,12 @@ const RULES: &[Rule] = &[
         owner: Some("common/components/dialog.rs"),
     },
     Rule {
+        construct: "file picker",
+
+        patterns: &["rfd::"],
+        owner: Some("common/file_dialog.rs"),
+    },
+    Rule {
         construct: "frame",
         patterns: &[
             "Frame::new(",

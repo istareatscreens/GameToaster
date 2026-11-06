@@ -1,12 +1,24 @@
+use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
+use windows::Win32::Foundation::HANDLE;
+
 use crate::launcher_gui::model::GameEntry;
 use crate::launcher_gui::process::{ProcessManager, SpawnSpec, SpawnedProcess};
 use crate::support::process::console_policy::{self, ConsolePlan, ConsoleSettings};
+use crate::support::process::handle::{creation_time, CreationTime};
 use crate::support::process::image::ProgramKind;
 use crate::support::process::interpreter::script_command;
+
+mod cancel;
+mod handoff;
+mod pre_start;
+
+pub use cancel::LaunchCancel;
+pub use handoff::HandoffGate;
+pub use pre_start::{PreStartFailure, PRE_START_TIMEOUT};
 
 #[derive(Clone, Debug)]
 pub struct LaunchPlan {
@@ -41,14 +53,14 @@ impl RuntimeService {
         })
     }
 
-    pub fn run_close_script(&self, script: &Path) -> Result<(), String> {
+    pub fn run_close_script(&self, script: &Path) -> Result<(u32, CreationTime), String> {
         if !script.is_file() {
             return Err(format!("close script is missing: {}", script.display()));
         }
         let directory = script.parent().unwrap_or(self.launcher_dir.as_path());
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-        script_command(script, &[])?
+        let child = script_command(script, &[])?
             .current_dir(directory)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -56,7 +68,9 @@ impl RuntimeService {
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|error| format!("failed to run close script {}: {error}", script.display()))?;
-        Ok(())
+
+        let created = creation_time(HANDLE(child.as_raw_handle())).unwrap_or_default();
+        Ok((child.id(), created))
     }
 
     pub fn launch(

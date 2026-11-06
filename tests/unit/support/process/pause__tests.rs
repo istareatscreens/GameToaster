@@ -57,9 +57,18 @@ fn the_line_tests_the_error_level_then_pauses_and_exits_with_it() {
         .unwrap(),
         concat!(
             r#"C:\Windows\System32\cmd.exe /e:on /v:off /d /s /c ""C:\Games\run.exe" --fast & "#,
-            r#"(if errorlevel 1 (pause & call exit %^errorlevel%) "#,
-            r#"else if not errorlevel 0 (pause & call exit %^errorlevel%))""#
+            r#"(if errorlevel 1 (title GameToaster: launch failure & pause & call exit %^errorlevel%) "#,
+            r#"else if not errorlevel 0 (title GameToaster: launch failure & pause & call exit %^errorlevel%))""#
         )
+    );
+}
+
+#[test]
+fn the_failure_title_is_the_one_the_console_watcher_reveals() {
+    assert!(ON_FAILURE.contains(&format!("title {PAUSED_TITLE} &")));
+    assert!(
+        !PAUSED_TITLE.contains(['&', '|', '<', '>', '^', '(', ')', '%', '!', '"']),
+        "the interpreter reads none of it specially"
     );
 }
 

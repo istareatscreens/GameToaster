@@ -100,3 +100,83 @@ fn non_selected_rows_clear_the_edge_affordances() {
         }
     }
 }
+
+#[test]
+fn the_launching_control_is_the_launch_teardrop_showing_an_x() {
+    let launch = edge_controls()
+        .into_iter()
+        .find(|(_, _, action)| *action == LauncherCommand::Launch)
+        .expect("a launch affordance exists");
+    assert_eq!(
+        launch.1,
+        icons::CHECK,
+        "the menu's launch button shows the checkmark"
+    );
+
+    assert_eq!(
+        launching_control(true),
+        Some((launch.0, icons::X, LauncherCommand::CancelLaunch))
+    );
+
+    assert_eq!(launching_control(false), None);
+}
+
+fn click_launching_screen_at(at: egui::Pos2, cancellable: bool) -> Option<LauncherCommand> {
+    let context = egui::Context::default();
+    let center = egui::pos2(400.0, 400.0);
+    let mut command = None;
+    let events = [
+        egui::Event::PointerMoved(at),
+        egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        },
+        egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        },
+    ];
+    for event in events {
+        let input = egui::RawInput {
+            events: vec![event],
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(800.0, 800.0),
+            )),
+            ..Default::default()
+        };
+        let _ = context.run_ui(input, |ui| {
+            let painter = ui.painter().clone();
+            command = command.or(render_launching_control(
+                ui,
+                &painter,
+                center,
+                380.0,
+                0.5,
+                cancellable,
+            ));
+        });
+    }
+    command
+}
+
+#[test]
+fn clicking_the_x_cancels_and_nothing_else_on_the_launching_screen_does() {
+    let (angle, _, _) = launching_control(true).expect("a cancellable launch has the X");
+    let (_, lobe, _) = teardrop(egui::pos2(400.0, 400.0), angle, 380.0, 0.5);
+    assert_eq!(
+        click_launching_screen_at(lobe, true),
+        Some(LauncherCommand::CancelLaunch)
+    );
+
+    assert_eq!(
+        click_launching_screen_at(egui::pos2(400.0, 400.0), true),
+        None
+    );
+
+    assert_eq!(click_launching_screen_at(lobe, false), None);
+}

@@ -101,6 +101,58 @@ fn kill_ends_the_plugin_and_reports_it_no_longer_runs() {
 }
 
 #[test]
+fn kill_ends_every_program_the_plugin_started_down_to_a_grandchild() {
+    use crate::support::process::tree::descendants;
+    let folder = tempfile::tempdir().unwrap();
+    let system = std::env::var_os("SystemRoot").expect("SystemRoot is set");
+    let shell = Path::new(&system).join("System32").join("cmd.exe");
+    let arguments = [
+        OsString::from("/c"),
+        OsString::from("cmd.exe /c ping -n 60 127.0.0.1"),
+    ];
+    for console in [HIDDEN, SHOWN] {
+        let mut process = PluginProcess::start(
+            StartSpec {
+                executable: &shell,
+                arguments: &arguments,
+                working_directory: folder.path(),
+                environment: &[],
+                console,
+            },
+            || {
+                let stdout =
+                    File::create(folder.path().join("stdout.txt")).map_err(|e| e.to_string())?;
+                let stderr =
+                    File::create(folder.path().join("stderr.txt")).map_err(|e| e.to_string())?;
+                Ok((stdout, stderr))
+            },
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let started = loop {
+            let started = descendants(process.id(), process.created());
+            if started.len() >= 2 {
+                break started;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "{console:?}: the stand-in never started its grandchild"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        process.kill();
+        wait_for(&process);
+        for program in &started {
+            assert!(
+                program.has_exited(),
+                "{console:?}: process {} was left running",
+                program.pid()
+            );
+        }
+    }
+}
+
+#[test]
 fn paused_the_program_is_held_from_the_first_look_until_it_has_ended() {
     let folder = tempfile::tempdir().unwrap();
     let mut process = start(folder.path(), PAUSE, &[("FAKE_DELAY_MS", "30000")]);

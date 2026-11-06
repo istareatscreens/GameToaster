@@ -25,6 +25,7 @@ fn sample() -> LauncherConfig {
             diagnostics_logging: true,
             block_exit_on_credit: true,
             pause_on_failure: true,
+            launch_config_programs_on_main_window: true,
             language: "ja".into(),
             adapter: Some(1),
             launcher_hotkey: Some("Ctrl+Alt+J".parse().unwrap()),
@@ -90,7 +91,7 @@ fn sample() -> LauncherConfig {
             }),
             hotkey: Some("Ctrl+Shift+F5".parse().unwrap()),
             watch_exe: Some("game.exe".into()),
-            close_mode: CloseMode::Script,
+            pre_start_script: Some(PathBuf::from(r"C:\遊戲\start server.bat")),
             close_script: Some(PathBuf::from(r"C:\遊戲\close.bat")),
             close_hotkey: Some("Ctrl+Shift+F6".parse().unwrap()),
             config_targets: vec![
@@ -139,7 +140,7 @@ fn default_replacement_and_removal_are_consistent() {
         plugin: None,
         hotkey: None,
         watch_exe: None,
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         close_hotkey: None,
         config_targets: Vec::new(),
@@ -159,7 +160,7 @@ fn invalid_values_are_rejected_without_panicking() {
     let path = dir.join(FILE_NAME);
     fs::write(
         &path,
-        "[launcher]\nschema_version=3\nauto_hide_on_launch=perhaps\nnext_game_id=nope\n",
+        "[launcher]\nschema_version=4\nauto_hide_on_launch=perhaps\nnext_game_id=nope\n",
     )
     .unwrap();
     assert!(load(&path).unwrap_err().contains("auto_hide_on_launch"));
@@ -172,7 +173,7 @@ fn partial_plugin_assignment_is_rejected() {
     let path = dir.join(FILE_NAME);
     fs::write(
         &path,
-        "[launcher]\nschema_version=3\nnext_game_id=2\n[game.1]\nlabel=Game\nselected_target=C:\\Games\\game.exe\nplugin_version=1.0.0\n",
+        "[launcher]\nschema_version=4\nnext_game_id=2\n[game.1]\nlabel=Game\nselected_target=C:\\Games\\game.exe\nplugin_version=1.0.0\n",
     )
     .unwrap();
     let error = load(&path).unwrap_err();
@@ -187,7 +188,7 @@ fn malformed_controller_fields_are_rejected_with_field_context() {
     let path = dir.join(FILE_NAME);
     fs::write(
         &path,
-        "[launcher]\nschema_version=3\nnext_game_id=1\n[game_launcher_screen]\ncontroller_driver=adx-hid\ncontroller_option.vid=not-hex\ncontroller_option.pid=5750\n",
+        "[launcher]\nschema_version=4\nnext_game_id=1\n[game_launcher_screen]\ncontroller_driver=adx-hid\ncontroller_option.vid=not-hex\ncontroller_option.pid=5750\n",
     )
     .unwrap();
     let error = load(&path).unwrap_err();
@@ -316,7 +317,7 @@ fn a_byte_order_mark_does_not_hide_the_first_section() {
     let path = directory.path().join(FILE_NAME);
     fs::write(
         &path,
-        "\u{feff}[launcher]\r\nschema_version=3\r\nauto_hide_on_launch=false\r\nlanguage=ja\r\n",
+        "\u{feff}[launcher]\r\nschema_version=4\r\nauto_hide_on_launch=false\r\nlanguage=ja\r\n",
     )
     .unwrap();
     let loaded = load(&path).unwrap();
@@ -327,4 +328,46 @@ fn a_byte_order_mark_does_not_hide_the_first_section() {
     let saved = fs::read_to_string(&path).unwrap();
     assert!(!saved.contains('\u{feff}'), "{saved}");
     assert_eq!(load(&path).unwrap(), loaded);
+}
+
+#[test]
+fn a_games_two_scripts_are_stored_only_when_set_and_no_close_mode_is_written() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join(FILE_NAME);
+    let mut config = sample();
+    save_atomic(&path, &config).unwrap();
+    let saved = fs::read_to_string(&path).unwrap();
+    assert!(
+        saved.contains("pre_start_script=C:\\遊戲\\start server.bat"),
+        "{saved}"
+    );
+    assert!(
+        saved.contains("close_script=C:\\遊戲\\close.bat"),
+        "{saved}"
+    );
+    assert!(!saved.contains("close_mode"), "{saved}");
+    assert_eq!(load(&path).unwrap(), config);
+
+    config.games[0].pre_start_script = None;
+    config.games[0].close_script = None;
+    save_atomic(&path, &config).unwrap();
+    let saved = fs::read_to_string(&path).unwrap();
+    assert!(!saved.contains("pre_start_script"), "{saved}");
+    assert!(!saved.contains("close_script"), "{saved}");
+    assert_eq!(load(&path).unwrap(), config);
+}
+
+#[test]
+fn a_close_mode_left_in_a_schema_4_file_means_nothing() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join(FILE_NAME);
+    fs::write(
+        &path,
+        "[launcher]\nschema_version=4\nnext_game_id=2\n\
+         [game.1]\nlabel=Game\nselected_target=C:\\Games\\game.exe\nclose_mode=script\n",
+    )
+    .unwrap();
+    let game = load(&path).unwrap().games.remove(0);
+    assert_eq!(game.pre_start_script, None);
+    assert_eq!(game.close_script, None);
 }

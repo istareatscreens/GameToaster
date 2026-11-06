@@ -1,7 +1,7 @@
 use configparser::ini::Ini;
 
 use super::super::{parse_current, LAUNCHER_SECTION, SCHEMA_VERSION};
-use super::steps::{launcher_config, schema_2};
+use super::steps::{launcher_config, schema_2, schema_3};
 use crate::launcher_gui::model::LauncherConfig;
 
 #[derive(Debug, Default)]
@@ -14,7 +14,7 @@ pub(super) struct Step {
     pub upgrade: fn(&mut Ini, &mut Findings) -> Result<(), String>,
 }
 
-pub(super) const STEPS: [Step; 2] = [
+pub(super) const STEPS: [Step; 3] = [
     Step {
         from: launcher_config::VERSION,
         upgrade: launcher_config::upgrade,
@@ -22,6 +22,10 @@ pub(super) const STEPS: [Step; 2] = [
     Step {
         from: schema_2::VERSION,
         upgrade: schema_2::upgrade,
+    },
+    Step {
+        from: schema_3::VERSION,
+        upgrade: schema_3::upgrade,
     },
 ];
 

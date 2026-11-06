@@ -1,5 +1,6 @@
 {
   "action": {
+    "cancel_launch": "Cancel launch",
     "add_game": "Add Game",
     "hotkeys": "Hotkeys",
     "minimize_tray": "Minimize to tray"
@@ -17,6 +18,7 @@
     "hide_cmd": "Auto hide command windows",
     "launch_default": "Launch default game on open",
     "pause_failure": "Pause console on launch failure",
+    "config_programs_on_main_window": "Launch config programs on main window",
     "block_exit_on_credit": "Block game exit on credit insert or active playing in managed plugin",
     "launch_on_startup": "Start GameToaster when Windows starts (in the tray)",
     "language": "Language",
@@ -89,12 +91,15 @@
     "close_named": "Close %{game}"
   },
   "gs": {
+    "watch_script_invalid": "A script (.bat or .cmd) can't be watched. Enter the program it starts, for example game.exe.",
     "watch_title": "Watch executable (optional)",
     "watch_hint": "The .exe the launcher waits to see on screen before hiding. With a plugin this is the executable selected for patching, shown here; leave it as shown, or type a different .exe (for .bat games).",
     "watch_placeholder": "e.g. rhythm_game.exe",
-    "close_action": "Close action",
-    "kill_game": "Kill game",
-    "run_script": "Run script",
+    "pre_start_script": "Pre Start Script",
+    "pre_start_hint": "Runs before the game starts. The game launches once it has finished; a script that fails stops the launch.",
+    "close_script": "Close Script",
+    "close_script_hint": "Runs after the game has closed, and after a launch that stopped once the pre-start script had run.",
+    "clear_script": "Clear",
     "no_script": "No script selected",
     "choose_bat": "Choose .bat",
     "config_menu": "Config menu (gear icon)",
@@ -112,6 +117,7 @@
   "picker": {
     "add_game": "Select a game executable or script",
     "watch_exe": "Select the executable to watch",
+    "pre_start_script": "Select a pre-start script",
     "close_script": "Select a close script",
     "add_target": "Add a config file or program for the gear menu",
     "filter_executable": "Executable or script",
@@ -453,6 +459,10 @@
       "select": "Controller type",
       "adx_io4": "ADX button ring (IO4)",
       "adx_hid": "ADX button ring (HID)",
+      "ndx_hid": "NDX button ring (HID)",
+      "ndx_io4": "NDX button ring (IO4)",
+      "npro": "NPro button ring",
+      "dao": "Dao controller",
       "jvs": "JVS button ring",
       "vid": "VID",
       "pid": "PID",
@@ -566,6 +576,7 @@
     }
   },
   "errors": {
+    "launch_cancelled": "The launch was cancelled.",
     "default_game_missing": "Default game is not set",
     "default_game_missing_detail": "Launch game on open is enabled, but no default game has been selected.",
     "game_did_not_start": "Game did not start",
@@ -589,6 +600,8 @@
     "shutdown_failed": "Shutdown failed",
     "launch_timed_out": "The game process “%{exe}” did not start in time. The launcher stayed open so you can check the game window.",
     "exited_immediately": "“%{exe}” started but exited immediately (exit code 0x%{code}) — it may have crashed. The launcher stayed open so you can check.",
+    "game_no_longer_running": "The game is no longer running",
+    "game_no_longer_running_detail": "“%{exe}” has not been running for 30 seconds while its plugin still runs. Cancel the launch to end the plugin, or wait if the game starts again.",
     "close_game_failed": "Could not close %{game}",
     "prepare_failed": "Could not prepare %{game}",
     "monitor_failed": "Could not monitor %{game}",
@@ -599,7 +612,10 @@
     "save_presentation_failed": "Could not save game presentation",
     "save_config_failed": "Could not save launcher configuration",
     "completion_watch_failed": "Game completion watch failed",
-    "no_close_script": "no close script is configured for this game",
+    "pre_start_failed": "The pre-start script %{script} failed (exit code %{code}).",
+    "pre_start_timeout": "The pre-start script %{script} did not finish within %{minutes} minutes and was stopped.",
+    "pre_start_not_started": "The pre-start script %{script} could not be started: %{detail}",
+    "close_script_failed": "Could not run the close script of %{game}",
     "still_running": "%{exe} is still running after the close attempt",
     "game_disappeared_before_launch": "game %{id} disappeared before launch",
     "no_plugin_assignment": "game has no plugin assignment",
@@ -617,12 +633,14 @@
     "launchable_type": "selected file must be an .exe, .bat, or .cmd: %{path}"
   },
   "busy": {
+    "cancelling_launch": "Cancelling the launch…",
     "picking_file": "Opening file picker…",
     "adding_game": "Validating and adding game…",
     "removing_game": "Removing game from launcher…",
     "choosing_artwork": "Choosing controller artwork…",
     "saving_presentation": "Saving game presentation…",
     "launching": "Launching game…",
+    "pre_start_script": "Running the pre-start script…",
     "closing": "Closing game…",
     "saving_settings": "Saving launcher settings…",
     "shutting_down": "Closing games and managed processes…"

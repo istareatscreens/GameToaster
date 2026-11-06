@@ -2,7 +2,7 @@ use std::path::Path;
 
 use super::*;
 use crate::gui::main_window::app::worker::plugin_backend::PluginBackend;
-use crate::launcher_gui::model::{CloseMode, GameEntry, GameId, PluginUpdatePolicy};
+use crate::launcher_gui::model::{GameEntry, GameId, PluginUpdatePolicy};
 use crate::plugin::catalog::library::PluginSelection;
 use crate::plugin::catalog::{Catalog, CatalogRevision};
 use crate::plugin::deployment::{AssignmentLedger, AssignmentState, DeploymentEngine};
@@ -81,7 +81,7 @@ fn approval_stores_the_selections_policy_options_and_the_ledgers_resolved_paths(
             plugin: None,
             hotkey: None,
             watch_exe: None,
-            close_mode: CloseMode::KillExe,
+            pre_start_script: None,
             close_script: None,
             close_hotkey: None,
             config_targets: Vec::new(),

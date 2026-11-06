@@ -2,11 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use windows::Win32::System::SystemInformation::GetSystemTimeAsFileTime;
 use windows::Win32::System::Threading::{
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
 };
 
 use super::handle::{CreationTime, ProcessHandle};
 use super::snapshot::{snapshot, SnapshotEntry};
+use super::ENDED_BY_LAUNCHER;
 
 const UNKNOWN: CreationTime = 0;
 
@@ -54,9 +55,8 @@ impl ProcessTree {
         );
     }
 
-    pub fn refresh(&mut self) {
-        let entries = snapshot();
-        self.absorb(&entries, now(), |pid| {
+    pub fn refresh_from(&mut self, entries: &[SnapshotEntry]) {
+        self.absorb(entries, now(), |pid| {
             let handle = open_member(pid)?;
             let created = handle.created()?;
             Some(Opened {
@@ -109,6 +109,16 @@ impl ProcessTree {
         }
     }
 
+    pub fn is_running_member(&self, pid: u32) -> bool {
+        self.members
+            .get(&pid)
+            .is_some_and(|member| match &member.handle {
+                Some(handle) => !handle.has_exited(),
+                None => member.gone_by.is_none() && self.running.contains(&pid),
+            })
+    }
+
+    #[cfg(test)]
     pub fn running_members(&self) -> Vec<u32> {
         self.members
             .iter()
@@ -137,6 +147,83 @@ pub fn direct_children(parent: u32, parent_created: CreationTime) -> Vec<Process
                 .is_some_and(|created| created >= parent_created)
         })
         .collect()
+}
+
+pub fn descendants(root: u32, root_created: CreationTime) -> Vec<ProcessHandle> {
+    let entries = snapshot();
+    let mut created: BTreeMap<u32, CreationTime> = BTreeMap::from([(root, root_created)]);
+    let mut found = Vec::new();
+    loop {
+        let mut joined = false;
+        for entry in &entries {
+            if entry.pid == entry.parent || created.contains_key(&entry.pid) {
+                continue;
+            }
+            let Some(&parent_created) = created.get(&entry.parent) else {
+                continue;
+            };
+            let Some(handle) = ProcessHandle::open(
+                entry.pid,
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE | PROCESS_TERMINATE,
+            ) else {
+                continue;
+            };
+            let Some(child_created) = handle.created() else {
+                continue;
+            };
+            if child_created < parent_created {
+                continue;
+            }
+            created.insert(entry.pid, child_created);
+            found.push(handle);
+            joined = true;
+        }
+        if !joined {
+            return found;
+        }
+    }
+}
+
+pub fn end_tree(root: u32, root_created: CreationTime, end_root: impl FnOnce(), wait_ms: u32) {
+    let mut started = descendants(root, root_created);
+    end_root();
+    for late in descendants(root, root_created) {
+        if started.iter().all(|known| known.pid() != late.pid()) {
+            started.push(late);
+        }
+    }
+    for program in &started {
+        program.terminate(ENDED_BY_LAUNCHER);
+    }
+
+    for program in &started {
+        unsafe {
+            let _ = WaitForSingleObject(program.raw(), wait_ms);
+        }
+    }
+}
+
+pub fn end_process_tree(root: u32, root_created: CreationTime, wait_ms: u32) {
+    let Some(handle) = ProcessHandle::open(
+        root,
+        PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE | PROCESS_TERMINATE,
+    ) else {
+        return;
+    };
+    if handle.created() != Some(root_created) {
+        return;
+    }
+    end_tree(
+        root,
+        root_created,
+        || {
+            handle.terminate(ENDED_BY_LAUNCHER);
+            unsafe {
+                let _ = WaitForSingleObject(handle.raw(), wait_ms);
+            }
+        },
+        wait_ms,
+    );
 }
 
 fn open_member(pid: u32) -> Option<ProcessHandle> {

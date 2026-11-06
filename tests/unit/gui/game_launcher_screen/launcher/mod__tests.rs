@@ -3,7 +3,7 @@ use crate::game_launcher_screen::{
     default_controller_config, ControllerScreenConfig, OrientationProfile,
 };
 use crate::gui::game_launcher_screen::{display, surface};
-use crate::launcher_gui::model::{CloseMode, GameEntry, GameId};
+use crate::launcher_gui::model::{GameEntry, GameId};
 
 pub(super) fn game(id: u64, label: &str) -> GameEntry {
     GameEntry {
@@ -14,7 +14,7 @@ pub(super) fn game(id: u64, label: &str) -> GameEntry {
         plugin: None,
         hotkey: None,
         watch_exe: None,
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         close_hotkey: None,
         config_targets: Vec::new(),

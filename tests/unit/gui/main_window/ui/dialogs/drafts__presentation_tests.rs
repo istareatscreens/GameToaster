@@ -1,5 +1,4 @@
 use super::*;
-use crate::launcher_gui::model::CloseMode;
 
 fn game() -> GameEntry {
     GameEntry {
@@ -10,7 +9,7 @@ fn game() -> GameEntry {
         plugin: None,
         hotkey: None,
         watch_exe: None,
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         close_hotkey: None,
         config_targets: Vec::new(),

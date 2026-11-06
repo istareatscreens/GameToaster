@@ -83,7 +83,7 @@ fn inspected_game_settings() -> GameSettingsDraft {
         id: crate::launcher_gui::model::GameId(7),
         label: "Game".into(),
         watch_exe: String::new(),
-        close_mode: crate::launcher_gui::model::CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         config_targets: vec![long.clone(), PathBuf::from("C:/Games/b.ini")],
         store_picker: None,
@@ -121,7 +121,9 @@ fn inspected_game_settings() -> GameSettingsDraft {
 
 fn scripted_game_settings() -> GameSettingsDraft {
     let mut draft = inspected_game_settings();
-    draft.close_mode = crate::launcher_gui::model::CloseMode::Script;
+    draft.pre_start_script = Some(PathBuf::from(
+        "C:/Games/Arcade Collection/A Very Long Folder Name For The Test/Scripts/start_the_server.bat",
+    ));
     draft.close_script = Some(PathBuf::from(
         "C:/Games/Arcade Collection/A Very Long Folder Name For The Test/Scripts/close_the_game.bat",
     ));

@@ -1,5 +1,6 @@
 {
   "action": {
+    "cancel_launch": "取消启动",
     "add_game": "添加游戏",
     "hotkeys": "快捷键",
     "minimize_tray": "最小化到托盘"
@@ -17,6 +18,7 @@
     "hide_cmd": "自动隐藏命令行窗口",
     "launch_default": "打开时启动默认游戏",
     "pause_failure": "启动失败时暂停控制台",
+    "config_programs_on_main_window": "在主窗口上打开配置程序",
     "block_exit_on_credit": "投币时或托管插件游戏进行中时阻止退出游戏",
     "launch_on_startup": "Windows 启动时自动运行 GameToaster（在托盘中）",
     "language": "语言",
@@ -89,12 +91,15 @@
     "close_named": "关闭 %{game}"
   },
   "gs": {
+    "watch_script_invalid": "无法监视脚本（.bat 或 .cmd）。请输入脚本启动的程序，例如 game.exe。",
     "watch_title": "监视的程序（可选）",
     "watch_hint": "启动器在隐藏前等待出现在屏幕上的 .exe。使用插件时，这里显示所选的打补丁程序；保持显示的值即可，或输入其他 .exe（用于 .bat 游戏）。",
     "watch_placeholder": "例如 rhythm_game.exe",
-    "close_action": "关闭操作",
-    "kill_game": "结束游戏",
-    "run_script": "运行脚本",
+    "pre_start_script": "启动前脚本",
+    "pre_start_hint": "在游戏启动前运行。脚本结束后游戏才会启动；脚本失败时将停止启动。",
+    "close_script": "关闭脚本",
+    "close_script_hint": "在游戏关闭后运行；启动前脚本运行后若启动停止，也会运行。",
+    "clear_script": "清除",
     "no_script": "未选择脚本",
     "choose_bat": "选择 .bat",
     "config_menu": "配置菜单（齿轮图标）",
@@ -112,6 +117,7 @@
   "picker": {
     "add_game": "选择游戏程序或脚本",
     "watch_exe": "选择要监视的程序",
+    "pre_start_script": "选择启动前脚本",
     "close_script": "选择关闭脚本",
     "add_target": "为齿轮菜单添加配置文件或程序",
     "filter_executable": "程序或脚本",
@@ -453,6 +459,10 @@
       "select": "控制器类型",
       "adx_io4": "ADX 按钮环（IO4）",
       "adx_hid": "ADX 按钮环（HID）",
+      "ndx_hid": "NDX 按钮环（HID）",
+      "ndx_io4": "NDX 按钮环（IO4）",
+      "npro": "NPro 按钮环",
+      "dao": "Dao 控制器",
       "jvs": "JVS 按钮环",
       "vid": "VID",
       "pid": "PID",
@@ -566,6 +576,7 @@
     }
   },
   "errors": {
+    "launch_cancelled": "启动已取消。",
     "default_game_missing": "未设置默认游戏",
     "default_game_missing_detail": "已启用打开时启动游戏，但尚未选择默认游戏。",
     "game_did_not_start": "游戏未启动",
@@ -589,6 +600,8 @@
     "shutdown_failed": "关闭失败",
     "launch_timed_out": "游戏进程“%{exe}”未在规定时间内启动。启动器保持打开，以便你检查游戏窗口。",
     "exited_immediately": "“%{exe}”已启动但立即退出（退出代码 0x%{code}），可能已崩溃。启动器保持打开，以便你检查。",
+    "game_no_longer_running": "游戏已不再运行",
+    "game_no_longer_running_detail": "插件仍在运行，但“%{exe}”已有 30 秒未运行。取消启动可结束插件；如果游戏会重新启动，请稍候。",
     "close_game_failed": "无法关闭 %{game}",
     "prepare_failed": "无法准备 %{game}",
     "monitor_failed": "无法监视 %{game}",
@@ -599,7 +612,10 @@
     "save_presentation_failed": "无法保存游戏显示设置",
     "save_config_failed": "无法保存启动器配置文件",
     "completion_watch_failed": "游戏结束监视失败",
-    "no_close_script": "此游戏未配置关闭脚本",
+    "pre_start_failed": "启动前脚本 %{script} 失败（退出代码 %{code}）。",
+    "pre_start_timeout": "启动前脚本 %{script} 未在 %{minutes} 分钟内结束，已被停止。",
+    "pre_start_not_started": "无法运行启动前脚本 %{script}：%{detail}",
+    "close_script_failed": "无法运行 %{game} 的关闭脚本",
     "still_running": "尝试关闭后，%{exe} 仍在运行",
     "game_disappeared_before_launch": "游戏 %{id} 在启动前消失",
     "no_plugin_assignment": "游戏没有分配插件",
@@ -617,12 +633,14 @@
     "launchable_type": "所选文件必须是 .exe、.bat 或 .cmd：%{path}"
   },
   "busy": {
+    "cancelling_launch": "正在取消启动…",
     "picking_file": "正在打开文件选择器…",
     "adding_game": "正在验证并添加游戏…",
     "removing_game": "正在从启动器移除游戏…",
     "choosing_artwork": "正在选择控制器界面图片…",
     "saving_presentation": "正在保存游戏显示设置…",
     "launching": "正在启动游戏…",
+    "pre_start_script": "正在运行启动前脚本…",
     "closing": "正在关闭游戏…",
     "saving_settings": "正在保存启动器设置…",
     "shutting_down": "正在关闭游戏和托管进程…"

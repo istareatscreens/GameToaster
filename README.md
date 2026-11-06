@@ -17,7 +17,11 @@ Kiosk launcher for games with non standard windows controllers and games for Win
 
 - ADX Controller IO4 Button Ring
 - ADX Controller HID Button Ring
+- NDX Controller IO4 Button Ring
+- NDX Controller HID Button Ring
 - JVS Controller (Pre-DX) Button Ring
+- Dao Controller Button Ring
+- NPro Controller Button Ring
 
 # Build
 

@@ -1,5 +1,5 @@
 use super::*;
-use crate::launcher_gui::model::{CloseMode, GameId};
+use crate::launcher_gui::model::GameId;
 use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -26,7 +26,7 @@ fn entry(path: PathBuf) -> GameEntry {
         plugin: None,
         hotkey: None,
         watch_exe: None,
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         close_hotkey: None,
         config_targets: Vec::new(),

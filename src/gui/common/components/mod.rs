@@ -11,8 +11,7 @@ mod toggle;
 
 pub use action_row::action_row;
 pub use button::{
-    action, action_enabled, action_sized, borderless_button, button, choice_button, copy_button,
-    ButtonRole,
+    action, action_enabled, action_sized, borderless_button, button, copy_button, ButtonRole,
 };
 pub use card::{card, compact_card, section};
 pub use combo::Combo;

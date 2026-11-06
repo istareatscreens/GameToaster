@@ -1,5 +1,6 @@
 pub mod coin;
 pub mod components;
+pub mod file_dialog;
 pub mod game_state;
 pub mod hash;
 pub(crate) mod message;

@@ -15,6 +15,7 @@ pub(crate) use domain::model::{
 };
 pub(crate) use launcher::ControllerLauncher;
 pub(crate) use lifecycle::coordinator::LaunchSource as ControllerLaunchSource;
+pub(crate) use surface::main_window::{main_window_circle, ScreenCircle};
 
 use crate::launcher_gui::model::{GameId, LauncherConfig};
 

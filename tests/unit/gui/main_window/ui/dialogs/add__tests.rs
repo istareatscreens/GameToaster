@@ -140,3 +140,24 @@ fn enter_in_the_label_field_continues_with_the_trimmed_label() {
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn a_typed_script_name_shows_why_and_keeps_continue_unavailable() {
+    let _locale = crate::gui::common::harness::locale("en");
+    let mut draft = draft("C:/games/start.bat", None);
+    draft.label = "Game".into();
+    draft.watch_exe = "start.cmd".into();
+    let mut event = DialogEvent::None;
+    {
+        let dialog = AddDialog::new(&mut draft, &mut event);
+        assert!(!dialog.valid(), "a script name cannot be added");
+    }
+    let texts = drawn(&mut draft);
+    assert!(
+        texts.iter().any(|text| text.contains("can't be watched")),
+        "{texts:?}"
+    );
+    draft.watch_exe = "game.exe".into();
+    let dialog = AddDialog::new(&mut draft, &mut event);
+    assert!(dialog.valid());
+}

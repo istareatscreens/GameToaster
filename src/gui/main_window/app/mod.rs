@@ -9,14 +9,15 @@ use crate::gui::common::theme;
 use crate::launcher_gui::dialogs::Dialog;
 use crate::launcher_gui::hotkeys::HotkeyService;
 use crate::launcher_gui::logging::LauncherLog;
-use crate::launcher_gui::model::LauncherConfig;
+use crate::launcher_gui::model::{GameId, LauncherConfig};
 use crate::launcher_gui::tray::TrayController;
 
-pub(crate) mod console_hider;
 mod frame;
 mod handlers;
+mod launch_flight;
 mod launch_monitor;
 mod pending_notice;
+mod placement;
 mod run;
 mod runtime_end;
 mod startup_screen;
@@ -25,7 +26,6 @@ mod worker;
 
 pub use run::run;
 
-use console_hider::ConsoleHider;
 use launch_monitor::PendingHide;
 use worker::Worker;
 
@@ -38,7 +38,10 @@ struct LauncherApp {
     hotkeys: HotkeyService,
     center_frames: u32,
     pending_hide: Option<PendingHide>,
-    pending_console_hide: Option<ConsoleHider>,
+
+    gone_game: Option<GameId>,
+
+    console_watch: Option<crate::launcher_gui::process::ConsoleWatch>,
     pending_settings_save: Option<LauncherConfig>,
 
     pending_background_retire: Vec<PathBuf>,
@@ -50,6 +53,16 @@ struct LauncherApp {
     startup_launch_attempted: bool,
     controller_startup_attempted: bool,
     controller_launch_pending: Option<(crate::launcher_gui::model::GameId, bool)>,
+
+    launch_cancel: Option<(
+        crate::launcher_gui::model::GameId,
+        crate::launcher_gui::runtime::LaunchCancel,
+    )>,
+
+    launch_handoff: Option<(
+        crate::launcher_gui::model::GameId,
+        crate::launcher_gui::runtime::HandoffGate,
+    )>,
     controller_running_game: Option<crate::launcher_gui::model::GameId>,
     main_visible: bool,
 
@@ -106,12 +119,18 @@ impl LauncherApp {
             creation.egui_ctx.clone(),
         );
         let game_state = crate::gui::common::game_state::GameStateHub::default();
+        let console_watch = crate::launcher_gui::process::ConsoleWatch::start(
+            config.settings.console().hides_consoles(),
+        )
+        .inspect_err(|error| log.event("console-watch-start-error", &[("error", error.clone())]))
+        .ok();
         Self {
             worker: Worker::start(
                 launcher_dir.clone(),
                 log.clone(),
                 creation.egui_ctx.clone(),
                 game_state.clone(),
+                console_watch.as_ref().map(|watch| watch.handle()),
             ),
             launcher_dir,
             config,
@@ -120,7 +139,8 @@ impl LauncherApp {
             hotkeys,
             center_frames: 8,
             pending_hide: None,
-            pending_console_hide: None,
+            gone_game: None,
+            console_watch,
             pending_settings_save: migrated_settings_save,
             pending_background_retire: Vec::new(),
             store_apps_rx: None,
@@ -130,6 +150,8 @@ impl LauncherApp {
             startup_launch_attempted: false,
             controller_startup_attempted: false,
             controller_launch_pending: None,
+            launch_cancel: None,
+            launch_handoff: None,
             controller_running_game: None,
             main_visible,
             started_in_tray: start_in_tray,

@@ -55,3 +55,27 @@ fn a_pending_notice_opens_the_main_window_however_the_launcher_starts() {
         true
     ));
 }
+
+#[test]
+fn the_main_window_has_a_taskbar_button_and_keeps_its_fixed_frameless_shape() {
+    let icon = egui::IconData {
+        rgba: vec![0; 4],
+        width: 1,
+        height: 1,
+    };
+    let viewport = main_viewport(true, icon.clone());
+    assert_eq!(viewport.taskbar, Some(true));
+    assert_eq!(viewport.visible, Some(true));
+    assert_eq!(viewport.title.as_deref(), Some("GameToaster"));
+    assert_eq!(viewport.app_id.as_deref(), Some("gametoaster-launcher"));
+    assert_eq!(viewport.inner_size, Some(egui::vec2(1080.0, 800.0)));
+    assert_eq!(viewport.min_inner_size, Some(egui::vec2(1080.0, 800.0)));
+    assert_eq!(viewport.max_inner_size, Some(egui::vec2(1080.0, 800.0)));
+    assert_eq!(viewport.decorations, Some(false));
+    assert_eq!(viewport.resizable, Some(false));
+    assert!(viewport.icon.is_some());
+
+    let hidden = main_viewport(false, icon);
+    assert_eq!(hidden.visible, Some(false));
+    assert_eq!(hidden.taskbar, Some(true));
+}

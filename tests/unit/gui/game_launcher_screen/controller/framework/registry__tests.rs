@@ -73,14 +73,17 @@ fn a_driver_binding_one_button_twice_is_refused() {
 }
 
 #[test]
-fn the_built_in_registry_is_the_three_ring_devices() {
+fn the_built_in_registry_is_every_ring_device() {
     let registry = AdapterRegistry::with_default_adapters();
     let ids: Vec<&str> = registry
         .descriptors()
         .iter()
         .map(|driver| driver.id)
         .collect();
-    assert_eq!(ids, vec!["adx-hid", "adx-io4", "jvs"]);
+    assert_eq!(
+        ids,
+        vec!["adx-hid", "adx-io4", "dao", "jvs", "ndx-hid", "ndx-io4", "npro"]
+    );
 
     let mut registry = registry;
     registry

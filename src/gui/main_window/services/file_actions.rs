@@ -3,12 +3,12 @@ use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
 
-pub fn open_config_target(target: &Path) -> Result<(), String> {
+pub fn open_config_target(target: &Path) -> Result<Option<u32>, String> {
     use crate::support::paths::has_extension;
     use crate::support::process::image::is_script;
 
     if crate::launcher_gui::store_apps::is_store_target(target) {
-        return crate::launcher_gui::store_apps::launch(target);
+        return crate::launcher_gui::store_apps::launch(target).map(|()| None);
     }
     if is_script(target) || has_extension(target, "exe") {
         let mut command = if is_script(target) {
@@ -23,13 +23,13 @@ pub fn open_config_target(target: &Path) -> Result<(), String> {
         }
         command
             .spawn()
-            .map(|_| ())
+            .map(|child| Some(child.id()))
             .map_err(|error| format!("failed to run {}: {error}", target.display()))
     } else {
         Command::new("notepad.exe")
             .arg(target)
             .spawn()
-            .map(|_| ())
+            .map(|child| Some(child.id()))
             .map_err(|error| format!("failed to open {} in Notepad: {error}", target.display()))
     }
 }

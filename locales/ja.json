@@ -1,5 +1,6 @@
 {
   "action": {
+    "cancel_launch": "起動をキャンセル",
     "add_game": "ゲームを追加",
     "hotkeys": "ショートカット",
     "minimize_tray": "トレイに最小化"
@@ -17,6 +18,7 @@
     "hide_cmd": "コマンドウィンドウを自動で隠す",
     "launch_default": "起動時に既定のゲームを起動",
     "pause_failure": "起動失敗時にコンソールを一時停止",
+    "config_programs_on_main_window": "設定プログラムをメインウィンドウ上で開く",
     "block_exit_on_credit": "クレジット投入時、または管理対象プラグインでのプレイ中はゲームの終了をブロック",
     "launch_on_startup": "Windows 起動時に GameToaster を起動（トレイに常駐）",
     "language": "言語",
@@ -89,12 +91,15 @@
     "close_named": "%{game} を閉じる"
   },
   "gs": {
+    "watch_script_invalid": "スクリプト（.bat / .cmd）は監視できません。スクリプトが起動するプログラムを入力してください（例：game.exe）。",
     "watch_title": "監視する実行ファイル（任意）",
     "watch_hint": "ランチャーが隠れる前に画面上で待つ .exe。プラグイン使用時はパッチ対象に選んだ実行ファイルがここに表示されます。表示のままにするか、別の .exe（.bat ゲーム用）を入力してください。",
     "watch_placeholder": "例: rhythm_game.exe",
-    "close_action": "終了動作",
-    "kill_game": "ゲームを終了",
-    "run_script": "スクリプトを実行",
+    "pre_start_script": "起動前スクリプト",
+    "pre_start_hint": "ゲームの起動前に実行されます。スクリプトの終了後にゲームが起動します。スクリプトが失敗すると起動は中止されます。",
+    "close_script": "終了スクリプト",
+    "close_script_hint": "ゲームの終了後に実行されます。起動前スクリプトの実行後に起動が中止された場合にも実行されます。",
+    "clear_script": "クリア",
     "no_script": "スクリプトが選択されていません",
     "choose_bat": ".bat を選択",
     "config_menu": "設定メニュー（歯車アイコン）",
@@ -112,6 +117,7 @@
   "picker": {
     "add_game": "ゲームの実行ファイルまたはスクリプトを選択",
     "watch_exe": "監視する実行ファイルを選択",
+    "pre_start_script": "起動前スクリプトを選択",
     "close_script": "終了スクリプトを選択",
     "add_target": "歯車メニュー用の設定ファイルまたはプログラムを追加",
     "filter_executable": "実行ファイルまたはスクリプト",
@@ -453,6 +459,10 @@
       "select": "コントローラーの種類",
       "adx_io4": "ADX ボタンリング（IO4）",
       "adx_hid": "ADX ボタンリング（HID）",
+      "ndx_hid": "NDX ボタンリング（HID）",
+      "ndx_io4": "NDX ボタンリング（IO4）",
+      "npro": "NPro ボタンリング",
+      "dao": "Dao コントローラー",
       "jvs": "JVS ボタンリング",
       "vid": "VID",
       "pid": "PID",
@@ -566,6 +576,7 @@
     }
   },
   "errors": {
+    "launch_cancelled": "起動はキャンセルされました。",
     "default_game_missing": "既定のゲームが設定されていません",
     "default_game_missing_detail": "起動時に既定のゲームを起動する設定がオンですが、既定のゲームが選択されていません。",
     "game_did_not_start": "ゲームが起動しませんでした",
@@ -589,6 +600,8 @@
     "shutdown_failed": "終了処理に失敗しました",
     "launch_timed_out": "ゲームプロセス「%{exe}」が時間内に起動しませんでした。ゲーム画面を確認できるよう、ランチャーは開いたままです。",
     "exited_immediately": "「%{exe}」は起動しましたが、すぐに終了しました（終了コード 0x%{code}）。クラッシュした可能性があります。確認できるよう、ランチャーは開いたままです。",
+    "game_no_longer_running": "ゲームが実行されていません",
+    "game_no_longer_running_detail": "プラグインは実行中ですが、「%{exe}」が30秒間実行されていません。プラグインを終了するには起動をキャンセルしてください。ゲームが再び起動する場合はお待ちください。",
     "close_game_failed": "%{game} を終了できませんでした",
     "prepare_failed": "%{game} を準備できませんでした",
     "monitor_failed": "%{game} を監視できませんでした",
@@ -599,7 +612,10 @@
     "save_presentation_failed": "ゲームの表示設定を保存できませんでした",
     "save_config_failed": "ランチャーの設定ファイルを保存できませんでした",
     "completion_watch_failed": "ゲーム終了の監視に失敗しました",
-    "no_close_script": "このゲームには終了スクリプトが設定されていません",
+    "pre_start_failed": "起動前スクリプト %{script} が失敗しました（終了コード %{code}）。",
+    "pre_start_timeout": "起動前スクリプト %{script} が %{minutes} 分以内に終了しなかったため、停止しました。",
+    "pre_start_not_started": "起動前スクリプト %{script} を開始できませんでした：%{detail}",
+    "close_script_failed": "%{game} の終了スクリプトを実行できませんでした",
     "still_running": "終了を試みましたが、%{exe} はまだ実行中です",
     "game_disappeared_before_launch": "起動前にゲーム %{id} が見つからなくなりました",
     "no_plugin_assignment": "ゲームにプラグインが割り当てられていません",
@@ -617,12 +633,14 @@
     "launchable_type": "選択するファイルは .exe、.bat、.cmd のいずれかである必要があります：%{path}"
   },
   "busy": {
+    "cancelling_launch": "起動をキャンセルしています…",
     "picking_file": "ファイル選択を開いています…",
     "adding_game": "ゲームを検証して追加しています…",
     "removing_game": "ランチャーからゲームを削除しています…",
     "choosing_artwork": "コントローラー画面用画像を選択しています…",
     "saving_presentation": "ゲームの表示設定を保存しています…",
     "launching": "ゲームを起動しています…",
+    "pre_start_script": "起動前スクリプトを実行しています…",
     "closing": "ゲームを終了しています…",
     "saving_settings": "ランチャーの設定を保存しています…",
     "shutting_down": "ゲームと管理対象のプロセスを終了しています…"

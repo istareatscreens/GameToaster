@@ -8,7 +8,6 @@ pub enum ButtonRole {
     Secondary,
     Quiet,
     Destructive,
-    Selected,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -37,11 +36,6 @@ fn role_style(role: ButtonRole) -> RoleStyle {
             theme::INACTIVE_LAVENDER,
         ),
         ButtonRole::Destructive => (theme::SALMON, theme::CLOSE_HOVER, theme::ERROR),
-        ButtonRole::Selected => (
-            theme::SELECTED_CYAN,
-            theme::SELECTED_CYAN.gamma_multiply(1.08),
-            theme::PRIMARY_ORANGE,
-        ),
     };
     RoleStyle {
         idle,
@@ -55,7 +49,6 @@ pub struct SemanticButton<'a> {
     content: WidgetText,
     role: ButtonRole,
     borderless: bool,
-    selected: bool,
     minimum: Vec2,
     lifetime: std::marker::PhantomData<&'a ()>,
 }
@@ -93,7 +86,6 @@ impl Widget for SemanticButton<'_> {
         }
         let response = ui.add(
             egui::Button::new(self.content)
-                .selected(self.selected)
                 .min_size(self.minimum)
                 .stroke(stroke)
                 .corner_radius(if self.borderless { 4.0 } else { 6.0 })
@@ -108,58 +100,26 @@ fn semantic_button(
     content: impl Into<WidgetText>,
     role: ButtonRole,
     borderless: bool,
-    selected: bool,
     minimum: Vec2,
 ) -> SemanticButton<'static> {
     SemanticButton {
         content: content.into(),
         role,
         borderless,
-        selected,
         minimum,
         lifetime: std::marker::PhantomData,
     }
 }
 
 pub fn button(content: impl Into<WidgetText>, role: ButtonRole) -> SemanticButton<'static> {
-    semantic_button(
-        content,
-        role,
-        false,
-        role == ButtonRole::Selected,
-        Vec2::ZERO,
-    )
+    semantic_button(content, role, false, Vec2::ZERO)
 }
 
 pub fn borderless_button(
     content: impl Into<WidgetText>,
     role: ButtonRole,
 ) -> SemanticButton<'static> {
-    semantic_button(
-        content,
-        role,
-        true,
-        role == ButtonRole::Selected,
-        Vec2::ZERO,
-    )
-}
-
-pub fn choice_button(
-    content: impl Into<WidgetText>,
-    selected: bool,
-    minimum: Vec2,
-) -> SemanticButton<'static> {
-    semantic_button(
-        content,
-        if selected {
-            ButtonRole::Selected
-        } else {
-            ButtonRole::Secondary
-        },
-        false,
-        selected,
-        minimum,
-    )
+    semantic_button(content, role, true, Vec2::ZERO)
 }
 
 pub fn action(ui: &mut egui::Ui, content: impl Into<WidgetText>) -> Response {

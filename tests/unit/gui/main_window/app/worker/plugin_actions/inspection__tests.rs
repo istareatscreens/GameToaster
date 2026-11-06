@@ -1,5 +1,5 @@
 use super::*;
-use crate::launcher_gui::model::{CloseMode, GameId, PluginRevision, PluginUpdatePolicy};
+use crate::launcher_gui::model::{GameId, PluginRevision, PluginUpdatePolicy};
 use crate::plugin::deployment::{
     BackupRecord, FirstInstallOriginal, RecoveryFile, TransactionState,
 };
@@ -29,7 +29,7 @@ fn game_and_assignment() -> (GameEntry, PluginAssignment) {
         plugin: Some(assignment.clone()),
         hotkey: None,
         watch_exe: None,
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         close_hotkey: None,
         config_targets: Vec::new(),

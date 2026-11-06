@@ -1,5 +1,6 @@
 {
   "action": {
+    "cancel_launch": "取消啟動",
     "add_game": "新增遊戲",
     "hotkeys": "快捷鍵",
     "minimize_tray": "最小化到系統匣"
@@ -17,6 +18,7 @@
     "hide_cmd": "自動隱藏命令列視窗",
     "launch_default": "開啟時啟動預設遊戲",
     "pause_failure": "啟動失敗時暫停主控台",
+    "config_programs_on_main_window": "在主視窗上開啟設定程式",
     "block_exit_on_credit": "投幣時或受管外掛遊戲進行中時阻止退出遊戲",
     "launch_on_startup": "Windows 啟動時自動執行 GameToaster（於系統匣）",
     "language": "語言",
@@ -89,12 +91,15 @@
     "close_named": "關閉 %{game}"
   },
   "gs": {
+    "watch_script_invalid": "無法監視指令碼（.bat 或 .cmd）。請輸入指令碼啟動的程式，例如 game.exe。",
     "watch_title": "監視的程式（選用）",
     "watch_hint": "啟動器在隱藏前等待出現在螢幕上的 .exe。使用外掛時，這裡顯示所選的修補目標程式；保持顯示的值即可，或輸入其他 .exe（用於 .bat 遊戲）。",
     "watch_placeholder": "例如 rhythm_game.exe",
-    "close_action": "關閉操作",
-    "kill_game": "結束遊戲",
-    "run_script": "執行指令碼",
+    "pre_start_script": "啟動前指令碼",
+    "pre_start_hint": "在遊戲啟動前執行。指令碼結束後遊戲才會啟動；指令碼失敗時將停止啟動。",
+    "close_script": "關閉指令碼",
+    "close_script_hint": "在遊戲關閉後執行；啟動前指令碼執行後若啟動停止，也會執行。",
+    "clear_script": "清除",
     "no_script": "未選擇指令碼",
     "choose_bat": "選擇 .bat",
     "config_menu": "設定選單（齒輪圖示）",
@@ -112,6 +117,7 @@
   "picker": {
     "add_game": "選擇遊戲程式或指令碼",
     "watch_exe": "選擇要監視的程式",
+    "pre_start_script": "選擇啟動前指令碼",
     "close_script": "選擇關閉指令碼",
     "add_target": "為齒輪選單新增設定檔或程式",
     "filter_executable": "程式或指令碼",
@@ -453,6 +459,10 @@
       "select": "控制器類型",
       "adx_io4": "ADX 按鈕環（IO4）",
       "adx_hid": "ADX 按鈕環（HID）",
+      "ndx_hid": "NDX 按鈕環（HID）",
+      "ndx_io4": "NDX 按鈕環（IO4）",
+      "npro": "NPro 按鈕環",
+      "dao": "Dao 控制器",
       "jvs": "JVS 按鈕環",
       "vid": "VID",
       "pid": "PID",
@@ -566,6 +576,7 @@
     }
   },
   "errors": {
+    "launch_cancelled": "啟動已取消。",
     "default_game_missing": "未設定預設遊戲",
     "default_game_missing_detail": "已啟用開啟時啟動遊戲，但尚未選擇預設遊戲。",
     "game_did_not_start": "遊戲未啟動",
@@ -589,6 +600,8 @@
     "shutdown_failed": "關閉失敗",
     "launch_timed_out": "遊戲程序「%{exe}」未在時限內啟動。啟動器保持開啟，以便你檢查遊戲視窗。",
     "exited_immediately": "「%{exe}」已啟動但立即結束（結束代碼 0x%{code}），可能已當機。啟動器保持開啟，以便你檢查。",
+    "game_no_longer_running": "遊戲已不再執行",
+    "game_no_longer_running_detail": "外掛仍在執行，但「%{exe}」已有 30 秒未執行。取消啟動可結束外掛；如果遊戲會重新啟動，請稍候。",
     "close_game_failed": "無法關閉 %{game}",
     "prepare_failed": "無法準備 %{game}",
     "monitor_failed": "無法監視 %{game}",
@@ -599,7 +612,10 @@
     "save_presentation_failed": "無法儲存遊戲顯示設定",
     "save_config_failed": "無法儲存啟動器設定檔",
     "completion_watch_failed": "遊戲結束監視失敗",
-    "no_close_script": "此遊戲未設定關閉指令碼",
+    "pre_start_failed": "啟動前指令碼 %{script} 失敗（結束代碼 %{code}）。",
+    "pre_start_timeout": "啟動前指令碼 %{script} 未在 %{minutes} 分鐘內結束，已被停止。",
+    "pre_start_not_started": "無法執行啟動前指令碼 %{script}：%{detail}",
+    "close_script_failed": "無法執行 %{game} 的關閉指令碼",
     "still_running": "嘗試關閉後，%{exe} 仍在執行",
     "game_disappeared_before_launch": "遊戲 %{id} 在啟動前消失",
     "no_plugin_assignment": "遊戲沒有指派外掛",
@@ -617,12 +633,14 @@
     "launchable_type": "所選檔案必須是 .exe、.bat 或 .cmd：%{path}"
   },
   "busy": {
+    "cancelling_launch": "正在取消啟動…",
     "picking_file": "正在開啟檔案選擇器…",
     "adding_game": "正在驗證並新增遊戲…",
     "removing_game": "正在從啟動器移除遊戲…",
     "choosing_artwork": "正在選擇控制器介面圖片…",
     "saving_presentation": "正在儲存遊戲顯示設定…",
     "launching": "正在啟動遊戲…",
+    "pre_start_script": "正在執行啟動前指令碼…",
     "closing": "正在關閉遊戲…",
     "saving_settings": "正在儲存啟動器設定…",
     "shutting_down": "正在關閉遊戲和受管程序…"

@@ -7,7 +7,7 @@ use crate::gui::common::harness::{
     click, footer_actions, painted_scroll_bars, painted_texts, settled, MAIN_WINDOW,
 };
 use crate::gui::common::theme;
-use crate::launcher_gui::model::{CloseMode, GameEntry, GameId};
+use crate::launcher_gui::model::{GameEntry, GameId};
 use crate::plugin::catalog::library::PluginDescriptor;
 use crate::plugin::catalog::CatalogRevision;
 use crate::plugin::manifest::Manifest;
@@ -187,7 +187,7 @@ pub(super) fn game_entry() -> GameEntry {
         plugin: None,
         hotkey: None,
         watch_exe: None,
-        close_mode: CloseMode::KillExe,
+        pre_start_script: None,
         close_script: None,
         close_hotkey: None,
         config_targets: vec![PathBuf::from(r"C:\games\game.ini")],

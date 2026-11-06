@@ -20,7 +20,6 @@ fn every_semantic_role_owns_distinct_interaction_states() {
         ButtonRole::Secondary,
         ButtonRole::Quiet,
         ButtonRole::Destructive,
-        ButtonRole::Selected,
     ] {
         let style = role_style(role);
         assert_ne!(style.idle, style.hovered, "{role:?} hover state");

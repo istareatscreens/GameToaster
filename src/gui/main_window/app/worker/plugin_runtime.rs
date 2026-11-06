@@ -10,6 +10,7 @@ use rust_i18n::t;
 use super::messages::{WorkerCommand, WorkerResult};
 use crate::launcher_gui::logging::LauncherLog;
 use crate::launcher_gui::model::{GameEntry, GameId};
+use crate::launcher_gui::runtime::LaunchCancel;
 use crate::plugin::lifecycle::{runtime_executable_candidates, ReconcileResult};
 use crate::plugin::manifest::Operation as ManifestOperation;
 use crate::plugin::runtime::{
@@ -219,7 +220,7 @@ pub(super) fn run_optional_runtime(
     log: &LauncherLog,
 ) -> Result<(), String> {
     match spec {
-        Some(spec) => run_runtime_operation(game_id, spec, game_state, results, ctx, log),
+        Some(spec) => run_runtime_operation(game_id, spec, None, game_state, results, ctx, log),
         None => Ok(()),
     }
 }
@@ -303,6 +304,7 @@ fn operation_name(operation: RuntimeOperation) -> String {
 pub(super) fn run_runtime_operation(
     game_id: GameId,
     spec: OperationSpec,
+    cancel: Option<&LaunchCancel>,
     game_state: &crate::gui::common::game_state::GameStateHub,
     results: &mpsc::Sender<WorkerResult>,
     ctx: &egui::Context,
@@ -310,6 +312,9 @@ pub(super) fn run_runtime_operation(
 ) -> Result<(), String> {
     let operation = operation_name(spec.operation);
     let handle = RuntimeHost::start(spec)?;
+    if let Some(cancel) = cancel {
+        cancel.set_operation(Some(handle.cancel_token()));
+    }
     let outcome = loop {
         let event = match handle.recv() {
             Ok(event) => event,
@@ -322,6 +327,7 @@ pub(super) fn run_runtime_operation(
                 created,
             } => {
                 let _ = results.send(WorkerResult::ProgramStarted {
+                    game_id: Some(game_id),
                     process_id,
                     created,
                 });
@@ -357,6 +363,9 @@ pub(super) fn run_runtime_operation(
             RuntimeEvent::WorkerFailure(error) => break Err(error),
         }
     };
+    if let Some(cancel) = cancel {
+        cancel.set_operation(None);
+    }
 
     game_state.clear();
     let _ = results.send(WorkerResult::PluginOperationEnded { game_id });
@@ -398,11 +407,20 @@ pub(super) fn log_runtime_event(
             "plugin-channel-ignored",
             vec![("type", message_type.clone())],
         ),
-        RuntimeEvent::Message(_)
-        | RuntimeEvent::Exited(_)
-        | RuntimeEvent::TimedOut
-        | RuntimeEvent::LauncherCancelled
-        | RuntimeEvent::WorkerFailure(_) => return,
+
+        RuntimeEvent::Exited(child) => (
+            "plugin-runtime-ended",
+            vec![("end", "exited".into()), ("code", child.code.to_string())],
+        ),
+        RuntimeEvent::TimedOut => ("plugin-runtime-ended", vec![("end", "timed-out".into())]),
+        RuntimeEvent::LauncherCancelled => {
+            ("plugin-runtime-ended", vec![("end", "cancelled".into())])
+        }
+        RuntimeEvent::WorkerFailure(reason) => (
+            "plugin-runtime-ended",
+            vec![("end", "failed".into()), ("reason", reason.clone())],
+        ),
+        RuntimeEvent::Message(_) => return,
     };
     let mut fields = vec![
         ("game_id", game_id.to_string()),

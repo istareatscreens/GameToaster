@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use rust_i18n::t;
 
 use crate::launcher_gui::hotkeys::Hotkey;
-use crate::launcher_gui::model::{automatic_watch_name, CloseMode, GameEntry, GameId};
+use crate::launcher_gui::model::{automatic_watch_name, GameEntry, GameId};
 use crate::plugin::catalog::library::PluginDescriptor;
 use crate::support::paths::paths_equal;
 
@@ -79,10 +79,17 @@ impl AddDraft {
             .map(str::trim)
             .filter(|value| !value.is_empty());
         let candidate = match requested {
-            Some(value) => Path::new(value).file_name(),
-            None => self.path.file_name(),
+            Some(value) => Path::new(value),
+            None => self.path.as_path(),
         };
-        candidate.and_then(|name| name.to_str()).map(str::to_owned)
+
+        if crate::support::process::image::is_script(candidate) {
+            return None;
+        }
+        candidate
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_owned)
     }
 
     pub fn watch_override(&self) -> Option<String> {
@@ -103,7 +110,7 @@ impl AddDraft {
             plugin: None,
             hotkey: None,
             watch_exe: self.watch_override(),
-            close_mode: CloseMode::KillExe,
+            pre_start_script: None,
             close_script: None,
             close_hotkey: None,
             config_targets: Vec::new(),
@@ -407,7 +414,7 @@ pub struct GameSettingsDraft {
     pub id: GameId,
     pub label: String,
     pub watch_exe: String,
-    pub close_mode: CloseMode,
+    pub pre_start_script: Option<PathBuf>,
     pub close_script: Option<PathBuf>,
     pub config_targets: Vec<PathBuf>,
     pub store_picker: Option<StorePicker>,

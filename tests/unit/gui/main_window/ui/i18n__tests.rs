@@ -358,8 +358,11 @@ fn every_locale_key_is_used_by_the_source() {
 
 const TECHNICAL_TOKENS: &[&str] = &[
     "ADX",
+    "NDX",
+    "Dao",
     "HID",
     "IO4",
+    "NPro",
     "JVS",
     "LED",
     "VID",

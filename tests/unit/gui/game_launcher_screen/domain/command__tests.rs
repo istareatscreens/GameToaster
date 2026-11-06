@@ -103,3 +103,32 @@ fn a_disabled_command_does_nothing_and_an_empty_library_launches_nothing() {
     assert!(actions.is_empty());
     assert_eq!(games.selected(), None);
 }
+
+#[test]
+fn cancel_launch_is_never_gated_and_becomes_the_app_action() {
+    let screen = ControllerScreenConfig {
+        ba1_enabled: false,
+        ba2_enabled: false,
+        ..Default::default()
+    };
+    assert!(LauncherCommand::CancelLaunch.enabled(&screen));
+    let mut games = library();
+    let mut actions = Vec::new();
+    apply(
+        LauncherCommand::CancelLaunch,
+        &screen,
+        &mut games,
+        &mut actions,
+    );
+    assert_eq!(actions, vec![ControllerLauncherAction::CancelLaunch]);
+}
+
+#[test]
+fn the_commands_keep_their_affordance_ids() {
+    assert_eq!(LauncherCommand::Previous as u8, 0);
+    assert_eq!(LauncherCommand::Next as u8, 1);
+    assert_eq!(LauncherCommand::Launch as u8, 2);
+    assert_eq!(LauncherCommand::ToggleMainWindow as u8, 3);
+    assert_eq!(LauncherCommand::LauncherX as u8, 4);
+    assert_eq!(LauncherCommand::CancelLaunch as u8, 5);
+}

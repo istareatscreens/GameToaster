@@ -7,13 +7,13 @@ use crate::game_launcher_screen::{
 };
 use crate::launcher_gui::hotkeys::{default_launcher_hotkey, Hotkey};
 use crate::launcher_gui::model::{
-    CloseMode, GameEntry, GameId, LauncherConfig, LauncherSettings, PluginAssignment,
-    PluginRevision, PluginUpdatePolicy,
+    GameEntry, GameId, LauncherConfig, LauncherSettings, PluginAssignment, PluginRevision,
+    PluginUpdatePolicy,
 };
 use crate::plugin::paths::ExternalGrant;
 
 pub const FILE_NAME: &str = "GameToaster.ini";
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 const LAUNCHER_SECTION: &str = "launcher";
 const CONTROLLER_SECTION: &str = "game_launcher_screen";
 
@@ -48,6 +48,11 @@ fn parse_current(ini: &Ini) -> Result<LauncherConfig, String> {
         diagnostics_logging: get_bool(ini, "diagnostics_logging", false)?,
         block_exit_on_credit: get_bool(ini, "block_exit_on_credit", false)?,
         pause_on_failure: get_bool(ini, "pause_on_failure", false)?,
+        launch_config_programs_on_main_window: get_bool(
+            ini,
+            "launch_config_programs_on_main_window",
+            false,
+        )?,
         language: ini
             .get(LAUNCHER_SECTION, "language")
             .map(|value| value.trim().to_string())
@@ -98,12 +103,6 @@ fn parse_current(ini: &Ini) -> Result<LauncherConfig, String> {
         };
         let hotkey = parse_hotkey("hotkey")?;
         let close_hotkey = parse_hotkey("close_hotkey")?;
-        let close_mode = match optional("close_mode") {
-            Some(value) => value
-                .parse::<CloseMode>()
-                .map_err(|error| format!("invalid close_mode in [{section}]: {error}"))?,
-            None => CloseMode::default(),
-        };
 
         let mut numbered: Vec<(u32, PathBuf)> = values
             .iter()
@@ -124,7 +123,7 @@ fn parse_current(ini: &Ini) -> Result<LauncherConfig, String> {
             plugin,
             hotkey,
             watch_exe: optional("watch_exe"),
-            close_mode,
+            pre_start_script: optional("pre_start_script").map(PathBuf::from),
             close_script: optional("close_script").map(PathBuf::from),
             close_hotkey,
             config_targets,
@@ -309,6 +308,11 @@ fn write(ini: &mut Ini, path: &Path, config: &LauncherConfig) -> Result<(), Stri
         config.settings.launch_default_on_open,
     );
     set_bool(ini, "pause_on_failure", config.settings.pause_on_failure);
+    set_bool(
+        ini,
+        "launch_config_programs_on_main_window",
+        config.settings.launch_config_programs_on_main_window,
+    );
     ini.setstr(
         LAUNCHER_SECTION,
         "language",
@@ -449,7 +453,13 @@ fn write(ini: &mut Ini, path: &Path, config: &LauncherConfig) -> Result<(), Stri
         if let Some(watch_exe) = &game.watch_exe {
             ini.setstr(&section, "watch_exe", Some(watch_exe));
         }
-        ini.setstr(&section, "close_mode", Some(&game.close_mode.to_string()));
+        if let Some(pre_start_script) = &game.pre_start_script {
+            ini.setstr(
+                &section,
+                "pre_start_script",
+                Some(&pre_start_script.to_string_lossy()),
+            );
+        }
         if let Some(close_script) = &game.close_script {
             ini.setstr(
                 &section,

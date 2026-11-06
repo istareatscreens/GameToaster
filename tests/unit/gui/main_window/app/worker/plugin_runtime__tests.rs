@@ -101,6 +101,7 @@ fn a_plugin_operation_reports_its_program_before_it_ends() {
     run_runtime_operation(
         GameId(1),
         operation,
+        None,
         &crate::gui::common::game_state::GameStateHub::default(),
         &results,
         &egui::Context::default(),
@@ -109,6 +110,7 @@ fn a_plugin_operation_reports_its_program_before_it_ends() {
     .unwrap();
     let reported: Vec<WorkerResult> = received.try_iter().collect();
     let Some(WorkerResult::ProgramStarted {
+        game_id: Some(GameId(1)),
         process_id,
         created,
     }) = reported.first()
@@ -124,6 +126,75 @@ fn a_plugin_operation_reports_its_program_before_it_ends() {
         reported.last(),
         Some(WorkerResult::PluginOperationEnded { .. })
     ));
+}
+
+#[test]
+fn cancelling_the_launch_ends_the_plugin_operation_it_waits_for() {
+    use crate::launcher_gui::runtime::LaunchCancel;
+    use crate::plugin::runtime::host::tests::{spec, with_env};
+
+    let _locale = locale("en");
+    let root = tempfile::tempdir().unwrap();
+    let pid_file = root.path().join("pid.txt");
+    let operation = with_env(
+        spec(root.path(), Duration::from_secs(120)),
+        &[
+            ("FAKE_DELAY_MS", "60000"),
+            ("FAKE_PID_FILE", pid_file.to_str().unwrap()),
+        ],
+    );
+    let (results, _received) = mpsc::channel();
+    let log = LauncherLog::open(root.path()).unwrap();
+    let cancel = LaunchCancel::new();
+    let remote = cancel.clone();
+    let watched = pid_file.clone();
+
+    let operator = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while std::time::Instant::now() < deadline {
+            if let Ok(pid) = std::fs::read_to_string(&watched) {
+                if let Ok(pid) = pid.trim().parse::<u32>() {
+                    remote.cancel();
+                    return Some(pid);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        None
+    });
+    let started = std::time::Instant::now();
+
+    let outcome = run_runtime_operation(
+        GameId(1),
+        operation,
+        Some(&cancel),
+        &crate::gui::common::game_state::GameStateHub::default(),
+        &results,
+        &egui::Context::default(),
+        &log,
+    );
+
+    let pid = operator
+        .join()
+        .unwrap()
+        .expect("the plugin ran and was cancelled");
+    assert_eq!(
+        outcome,
+        Err(t!(
+            "plugins.error.runtime_cancelled",
+            operation => operation_name(RuntimeOperation::Prepare)
+        )
+        .to_string())
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(40),
+        "not the plugin's minute"
+    );
+    assert!(
+        crate::launcher_gui::process::ProcessWatch::open(pid)
+            .is_none_or(|process| process.exit_code().is_some()),
+        "the plugin process ended"
+    );
 }
 
 #[test]
@@ -158,14 +229,13 @@ fn plugin_operations_start_only_where_their_program_is_reported() {
         ]
     );
     let launch = std::fs::read_to_string(root.join("main_window/app/worker/launch.rs")).unwrap();
-    assert_eq!(launch.matches("root_created").count(), 3);
+
+    assert_eq!(launch.matches("root_created").count(), 5);
 }
 
 mod builders {
     use super::*;
-    use crate::launcher_gui::model::{
-        CloseMode, PluginAssignment, PluginRevision, PluginUpdatePolicy,
-    };
+    use crate::launcher_gui::model::{PluginAssignment, PluginRevision, PluginUpdatePolicy};
     use crate::plugin::catalog::CatalogRevision;
     use crate::plugin::deployment::{AssignmentLedger, AssignmentState};
     use crate::plugin::lifecycle::ResolvedRuntime;
@@ -215,7 +285,7 @@ mod builders {
             }),
             hotkey: None,
             watch_exe: None,
-            close_mode: CloseMode::KillExe,
+            pre_start_script: None,
             close_script: None,
             close_hotkey: None,
             config_targets: Vec::new(),
@@ -379,4 +449,38 @@ fn a_plugins_log_line_and_an_invalid_line_reach_the_log_when_diagnostics_are_on(
         lines[1]
     );
     assert!(lines[1].contains("stage"), "{}", lines[1]);
+}
+
+#[test]
+fn how_a_plugin_run_ended_reaches_the_log_when_diagnostics_are_on() {
+    use crate::plugin::runtime::ChildResult;
+
+    let root = tempfile::tempdir().unwrap();
+    let log = LauncherLog::open(root.path()).unwrap();
+    log.set_enabled(true);
+    let ends = [
+        RuntimeEvent::Exited(ChildResult {
+            code: 3,
+            result: None,
+            output: None,
+        }),
+        RuntimeEvent::TimedOut,
+        RuntimeEvent::LauncherCancelled,
+        RuntimeEvent::WorkerFailure("the wait failed".into()),
+    ];
+    for end in &ends {
+        log_runtime_event(&log, GameId(7), "operation-1", end);
+    }
+    let written = std::fs::read_to_string(root.path().join("GameToaster.log")).unwrap();
+    let lines: Vec<&str> = written.lines().collect();
+    assert_eq!(lines.len(), 4, "{lines:?}");
+    for (line, end) in lines
+        .iter()
+        .zip(["exited", "timed-out", "cancelled", "failed"])
+    {
+        assert!(line.contains("operation=plugin-runtime-ended"), "{line}");
+        assert!(line.contains(&format!(r#"end="{end}""#)), "{line}");
+    }
+    assert!(lines[0].contains(r#"code="3""#), "{}", lines[0]);
+    assert!(lines[3].contains("the wait failed"), "{}", lines[3]);
 }

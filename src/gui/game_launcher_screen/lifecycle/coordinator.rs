@@ -3,6 +3,8 @@ use crate::launcher_gui::model::GameId;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::gui::game_launcher_screen) enum State {
     Idle,
+
+    Preparing,
     QuiescingController,
     Launching,
     Running,
@@ -76,6 +78,18 @@ impl LifecycleCoordinator {
         }
         self.pending = Some((game, source));
         self.controller_was_open = controller_open;
+
+        self.state = State::Preparing;
+        Ok(Vec::new())
+    }
+
+    pub fn begin_handoff(&mut self) -> Result<Vec<Action>, String> {
+        if self.state != State::Preparing {
+            return Err(format!(
+                "a controller handoff was asked for in {:?}, not while preparing",
+                self.state
+            ));
+        }
         self.state = State::QuiescingController;
         Ok(vec![
             Action::HideControllerViewport,

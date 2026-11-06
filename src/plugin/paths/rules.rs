@@ -9,6 +9,7 @@ use super::{
 };
 use crate::plugin::manifest::{normalize_package_path, CopyType, Manifest, WatchType};
 use crate::support::paths::{path_key, paths_equal};
+use crate::support::process::image::is_script;
 
 #[derive(Clone, Debug)]
 pub(super) struct Rule {
@@ -165,10 +166,19 @@ pub(super) fn resolve_watch(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
+
+    if requested.is_some_and(|value| is_script(Path::new(value))) {
+        return Err(
+            "executableWatch names a script, which cannot be watched; name the program it starts"
+                .to_string(),
+        );
+    }
     match watch_type {
         WatchType::GameDirectory => {
             let candidate = match requested {
                 Some(value) => resolve_relative(game_folder, value)?,
+
+                None if is_script(selected_target) => return Ok((None, None)),
                 None => selected_target.to_path_buf(),
             };
             Ok((Some(candidate), None))

@@ -12,7 +12,7 @@ pub struct ConsoleSettings {
 
 impl ConsoleSettings {
     pub fn hides_consoles(self) -> bool {
-        !self.show_command_windows && !self.pause_on_failure
+        !self.show_command_windows
     }
 }
 
@@ -49,12 +49,13 @@ pub struct ConsolePlan {
 
 pub fn plan(kind: ProgramKind, settings: ConsoleSettings) -> ConsolePlan {
     let hidden = settings.hides_consoles();
+    let pause = settings.pause_on_failure;
     let (window, pause_on_failure) = match kind {
-        ProgramKind::Script if hidden => (ConsoleWindow::Hidden, false),
+        ProgramKind::Script if hidden => (ConsoleWindow::Hidden, pause),
+
+        ProgramKind::Console if hidden && pause => (ConsoleWindow::Hidden, true),
         ProgramKind::Console if hidden => (ConsoleWindow::Windowless, false),
-        ProgramKind::Script | ProgramKind::Console => {
-            (ConsoleWindow::Shown, settings.pause_on_failure)
-        }
+        ProgramKind::Script | ProgramKind::Console => (ConsoleWindow::Shown, pause),
 
         ProgramKind::Graphical if hidden => (ConsoleWindow::Windowless, false),
         ProgramKind::Graphical => (ConsoleWindow::Graphical, false),

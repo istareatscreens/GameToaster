@@ -15,6 +15,7 @@ use super::super::domain::command::LauncherCommand;
 use super::super::surface::SurfaceShape;
 
 use washing_machine::WashingMachineLayout;
+pub(in crate::gui::game_launcher_screen) use washing_machine::ID as WASHING_MACHINE_ID;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::gui::game_launcher_screen) struct LauncherLayoutDescriptor {
@@ -27,7 +28,8 @@ pub(in crate::gui::game_launcher_screen) struct LauncherLayoutDescriptor {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::gui::game_launcher_screen) enum LauncherFrameMode<'a> {
     Menu { credit_readout: Option<&'a str> },
-    Launching { status: &'a str },
+
+    Launching { status: &'a str, cancellable: bool },
 }
 
 pub(in crate::gui::game_launcher_screen) struct LauncherFrame<'a> {

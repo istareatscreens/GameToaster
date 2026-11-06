@@ -24,6 +24,7 @@ impl<'a> AddDialog<'a> {
 
     fn valid(&self) -> bool {
         !self.draft.label.trim().is_empty()
+            && !super::watch_field::names_script(&self.draft.watch_exe)
     }
 
     fn continue_event(&self) -> DialogEvent {
@@ -65,7 +66,7 @@ impl DialogContent for AddDialog<'_> {
             .full_width()
             .show(ui);
         if components::action(ui, t!("plugins.import").to_string()).clicked() {
-            if let Some(path) = rfd::FileDialog::new()
+            if let Some(path) = crate::gui::common::file_dialog::file_dialog()
                 .set_title(t!("plugins.import_title").to_string())
                 .add_filter(t!("plugins.package_filter").to_string(), &["zip", "toml"])
                 .pick_file()

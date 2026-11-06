@@ -8,7 +8,12 @@ mod pickers;
 mod plugin_actions;
 mod plugin_backend;
 mod plugin_runtime;
+mod program_watch;
 mod sessions;
+
+#[cfg(test)]
+#[path = "../../../../../tests/unit/gui/main_window/app/worker/mod__fixtures.rs"]
+mod fixtures;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
@@ -34,6 +39,7 @@ impl Worker {
         log: LauncherLog,
         ctx: egui::Context,
         game_state: crate::gui::common::game_state::GameStateHub,
+        console_watch: Option<crate::launcher_gui::process::ConsoleWatchHandle>,
     ) -> Self {
         let (sender, commands) = mpsc::sync_channel::<WorkerCommand>(64);
         let internal_sender = sender.clone();
@@ -41,8 +47,16 @@ impl Worker {
         let thread = thread::Builder::new()
             .name("gametoaster-launcher-worker".into())
             .spawn(move || {
-                WorkerContext::new(launcher_dir, log, ctx, game_state, results, internal_sender)
-                    .run(commands)
+                WorkerContext::new(
+                    launcher_dir,
+                    log,
+                    ctx,
+                    game_state,
+                    results,
+                    internal_sender,
+                    console_watch,
+                )
+                .run(commands)
             })
             .expect("failed to create bounded launcher worker");
         Self {

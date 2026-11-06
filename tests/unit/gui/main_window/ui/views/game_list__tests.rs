@@ -1,6 +1,5 @@
 use super::*;
 use crate::gui::common::harness::{click, painted_shapes};
-use crate::launcher_gui::model::CloseMode;
 
 const SCREEN: egui::Rect =
     egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1080.0, 800.0));
@@ -18,7 +17,7 @@ fn game() -> GameEntry {
         plugin: None,
         hotkey: None,
         watch_exe: None,
-        close_mode: CloseMode::default(),
+        pre_start_script: None,
         close_script: None,
         close_hotkey: None,
         config_targets: Vec::new(),
