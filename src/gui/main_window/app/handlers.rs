@@ -572,7 +572,7 @@ impl LauncherApp {
                     self.open_controller();
                 }
             }
-            UiAction::MinimizeToTray => self.hide_all_to_tray(context),
+            UiAction::MinimizeToTray => self.hide_main_to_tray(context),
 
             UiAction::RequestClose => {
                 self.begin_shutdown();

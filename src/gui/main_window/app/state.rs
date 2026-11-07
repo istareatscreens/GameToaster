@@ -316,13 +316,10 @@ impl LauncherApp {
                     self.show_centered(context);
                 }
             }
+
             ControllerLauncherAction::HideLauncherToTray => {
                 if self.controller.is_suspended() {
                     self.controller.resume();
-                    if self.minimized_restore_main {
-                        self.show_centered(context);
-                    }
-                    self.minimized_restore_main = false;
                 } else if self
                     .config
                     .settings
@@ -330,14 +327,9 @@ impl LauncherApp {
                     .keep_controller_alive_when_minimized
                     && self.controller.is_open()
                 {
-                    self.minimized_restore_main = self.main_visible;
                     self.controller.suspend();
-                    if self.main_visible {
-                        context.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                        self.main_visible = false;
-                    }
                 } else {
-                    self.hide_all_to_tray(context);
+                    self.close_controller();
                 }
             }
             ControllerLauncherAction::CancelLaunch => self.cancel_launch(),
@@ -347,8 +339,7 @@ impl LauncherApp {
         }
     }
 
-    pub(super) fn hide_all_to_tray(&mut self, context: &egui::Context) {
-        self.close_controller();
+    pub(super) fn hide_main_to_tray(&mut self, context: &egui::Context) {
         context.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         self.main_visible = false;
     }

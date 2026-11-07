@@ -67,8 +67,6 @@ struct LauncherApp {
     main_visible: bool,
 
     started_in_tray: bool,
-
-    minimized_restore_main: bool,
     closing: bool,
     allow_close: bool,
 
@@ -155,7 +153,6 @@ impl LauncherApp {
             controller_running_game: None,
             main_visible,
             started_in_tray: start_in_tray,
-            minimized_restore_main: false,
             closing: false,
             allow_close: false,
             game_state: Box::new(game_state),
