@@ -49,15 +49,21 @@ impl ControllerLauncher {
                     pressed: true,
                 } => {
                     let command = self.manager.command_for(button);
-                    if self.launch_in_progress() {
-                        if command == Some(LauncherCommand::Launch)
-                            && launch_cancellable
-                            && self.cancel_arming.may_cancel()
-                        {
-                            actions.push(ControllerLauncherAction::CancelLaunch);
+                    match press_duty(self.test_pending, self.launch_in_progress()) {
+                        PressDuty::Readout => {}
+                        PressDuty::CancelLaunch => {
+                            if command == Some(LauncherCommand::Launch)
+                                && launch_cancellable
+                                && self.cancel_arming.may_cancel()
+                            {
+                                actions.push(ControllerLauncherAction::CancelLaunch);
+                            }
                         }
-                    } else if let Some(command) = command {
-                        command::apply(command, config, &mut self.games, &mut actions);
+                        PressDuty::Command => {
+                            if let Some(command) = command {
+                                command::apply(command, config, &mut self.games, &mut actions);
+                            }
+                        }
                     }
                 }
                 ManagerEvent::Edge {
@@ -76,6 +82,25 @@ impl ControllerLauncher {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PressDuty {
+    Readout,
+
+    CancelLaunch,
+
+    Command,
+}
+
+fn press_duty(testing: bool, launching: bool) -> PressDuty {
+    if testing {
+        PressDuty::Readout
+    } else if launching {
+        PressDuty::CancelLaunch
+    } else {
+        PressDuty::Command
+    }
+}
+
 fn button_labels(snapshot: ButtonWord) -> String {
     let labels: Vec<&'static str> = Button::ALL
         .into_iter()
@@ -88,3 +113,7 @@ fn button_labels(snapshot: ButtonWord) -> String {
         labels.join(", ")
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/gui/game_launcher_screen/launcher/input__tests.rs"]
+mod tests;

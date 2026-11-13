@@ -394,6 +394,7 @@ mod builders {
                     config_targets: Vec::new(),
                     runtime: Some(runtime()),
                     changed: false,
+                    kept_files: Vec::new(),
                 },
                 &runtime(),
                 RuntimeOperation::Launch,

@@ -34,7 +34,7 @@ fn point_in_polygon(px: f32, py: f32, poly: &[egui::Pos2]) -> bool {
 }
 
 #[test]
-fn preview_selected_orange_row_shape() {
+fn preview_selected_row_shape() {
     let (w, h) = (1200u32, 1200u32);
     let center = egui::pos2(600.0, 600.0);
     let radius = 560.0f32;
@@ -71,7 +71,7 @@ fn preview_selected_orange_row_shape() {
         poly.push(bl + Vec2::new(a.cos(), a.sin()) * corner);
     }
 
-    let orange = Rgba([0xFF, 0xA1, 0x6C, 0xFF]);
+    let bar = Rgba(theme::ROW_SELECTED.to_array());
     let lavender = Rgba([0xC5, 0xCF, 0xFE, 0xFF]);
     let mint = Rgba([0x8C, 0xE7, 0xE2, 0xFF]);
     let black = Rgba([0, 0, 0, 0xFF]);
@@ -81,7 +81,7 @@ fn preview_selected_orange_row_shape() {
             let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
             let d = ((fx - center.x).powi(2) + (fy - center.y).powi(2)).sqrt();
             let color = if point_in_polygon(fx, fy, &poly) {
-                orange
+                bar
             } else if (d - ring_mid).abs() <= ring_half {
                 mint
             } else if d <= radius {
@@ -92,7 +92,7 @@ fn preview_selected_orange_row_shape() {
             img.put_pixel(x, y, color);
         }
     }
-    save_preview("orange_bar_preview.png", &img);
+    save_preview("selected_bar_preview.png", &img);
 
     let mid_right = center.x + selected_reach;
     assert!(
@@ -244,7 +244,7 @@ fn resolution_screenshot_matrix_preserves_circle_mask_rows_and_artwork() {
                 py,
                 width,
                 1,
-                theme::PRIMARY_ORANGE.to_array(),
+                theme::ROW_SELECTED.to_array(),
             );
         }
 
@@ -451,4 +451,85 @@ fn the_backdrop_draws_the_frames_background_and_the_themed_fill_without_one() {
         "without a background the themed fill returns"
     );
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn the_selected_row_is_white_and_the_other_rows_stay_cream() {
+    use crate::game_launcher_screen::display::geometry::PixelRect;
+    use crate::game_launcher_screen::domain::circular_game_list::CircularGameList;
+    use crate::launcher_gui::model::{GameEntry, LauncherConfig};
+
+    let config = LauncherConfig {
+        games: (1..=3)
+            .map(|id| GameEntry {
+                id: GameId(id),
+                label: format!("Game {id}"),
+                controller_image: None,
+                selected_target: format!(r"C:\games\{id}.exe").into(),
+                plugin: None,
+                hotkey: None,
+                watch_exe: None,
+                pre_start_script: None,
+                close_script: None,
+                close_hotkey: None,
+                config_targets: Vec::new(),
+            })
+            .collect(),
+        ..LauncherConfig::default()
+    };
+    let mut games = CircularGameList::default();
+    games.rebuild(config.games.iter().map(|game| game.id));
+    assert_eq!(games.selected(), Some(GameId(1)));
+    let launcher_dir = std::env::temp_dir();
+    let frame = LauncherFrame {
+        launcher_dir: &launcher_dir,
+        config: &config,
+        background: None,
+        games: &games,
+        surface_px: PixelRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 800,
+        },
+        mode: LauncherFrameMode::Menu {
+            credit_readout: None,
+        },
+    };
+    let context = egui::Context::default();
+    let mut layout = WashingMachineLayout::default();
+    let output = context.run_ui(egui::RawInput::default(), |ui| {
+        let _ = layout.render(ui, &frame, None);
+    });
+    let shapes = crate::gui::common::harness::painted_shapes(&output);
+
+    let polygons_filled = |fill: Color32| {
+        shapes
+            .iter()
+            .filter(|shape| matches!(shape, egui::Shape::Path(path) if path.closed && path.fill == fill))
+            .count()
+    };
+    assert_eq!(theme::ROW_SELECTED, Color32::WHITE);
+    assert_eq!(polygons_filled(theme::ROW_SELECTED), 1);
+    assert_eq!(polygons_filled(theme::PRIMARY_ORANGE), 0);
+
+    let cream_rows = shapes
+        .iter()
+        .filter(|shape| matches!(shape, egui::Shape::Rect(rect) if rect.fill == theme::ROW_CREAM))
+        .count();
+    assert_eq!(cream_rows, 2);
+
+    let selected_label = shapes
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(text) if text.galley.text() == "Game 1" => Some(text),
+            _ => None,
+        })
+        .expect("the selected row's label is painted");
+    assert!(selected_label
+        .galley
+        .job
+        .sections
+        .iter()
+        .all(|section| section.format.color == theme::INK));
 }

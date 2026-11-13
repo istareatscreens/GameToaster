@@ -33,6 +33,23 @@ fn the_interface_number_comes_from_the_hardware_id() {
 }
 
 #[test]
+fn the_pipe_read_is_the_named_in_endpoint_whether_bulk_or_interrupt() {
+    use windows::Win32::Devices::Usb::{UsbdPipeTypeControl, UsbdPipeTypeIsochronous};
+
+    assert!(is_read_pipe(UsbdPipeTypeBulk, 0x81, 0x81));
+    assert!(is_read_pipe(UsbdPipeTypeInterrupt, 0x81, 0x81));
+
+    assert!(!is_read_pipe(UsbdPipeTypeBulk, 0x82, 0x81));
+    assert!(!is_read_pipe(UsbdPipeTypeInterrupt, 0x83, 0x81));
+
+    assert!(!is_read_pipe(UsbdPipeTypeBulk, 0x01, 0x81));
+    assert!(!is_read_pipe(UsbdPipeTypeBulk, 0x01, 0x01));
+
+    assert!(!is_read_pipe(UsbdPipeTypeControl, 0x81, 0x81));
+    assert!(!is_read_pipe(UsbdPipeTypeIsochronous, 0x81, 0x81));
+}
+
+#[test]
 fn the_registered_interface_classes_are_read_with_or_without_braces() {
     let guids =
         parse_guids("{7F2A9C41-5E3B-4D8A-9F16-3C7E5B2D9A48}\0A5DCBF10-6530-11D2-901F-00C04FB951ED");
@@ -41,4 +58,45 @@ fn the_registered_interface_classes_are_read_with_or_without_braces() {
         guids[0],
         GUID::from_u128(0x7F2A9C41_5E3B_4D8A_9F16_3C7E5B2D9A48)
     );
+}
+
+#[test]
+fn a_part_that_is_not_a_guid_is_left_out_of_the_interface_classes() {
+    for text in [
+        "not-a-guid",
+        "{7F2A9C41-5E3B-4D8A-9F16-3C7E5B2D9A4}",
+        "{7F2A9C41-5E3B-4D8A-9F16-3C7E5B2D9A488}",
+        "{7F2A9C41+5E3B-4D8A-9F16-3C7E5B2D9A48}",
+        "{7F2A9C41-5E3B-4D8A-9F16-3C7E5B2D9AZ8}",
+        "{7F2A9C41-5E3B-4D8A-9F163-C7E5B2D9A48}",
+        "{}",
+        "",
+        "\0\0",
+        ";;,",
+    ] {
+        assert!(parse_guids(text).is_empty(), "{text:?}");
+    }
+
+    let guids = parse_guids("garbage;{7f2a9c41-5e3b-4d8a-9f16-3c7e5b2d9a48},{bad}");
+    assert_eq!(
+        guids,
+        [GUID::from_u128(0x7F2A9C41_5E3B_4D8A_9F16_3C7E5B2D9A48)]
+    );
+}
+
+#[test]
+fn the_wanted_identity_is_what_was_entered_and_the_drivers_own_where_emptied() {
+    let adapter = super::super::super::devices::npro::adapter();
+    let mut config = adapter.descriptor().default_config();
+    assert_eq!(adapter.wanted_identity(&config), Ok((0x2E3C, 0x5751)));
+
+    config.options.insert("vid".into(), String::new());
+    config.options.insert("pid".into(), String::new());
+    assert_eq!(adapter.wanted_identity(&config), Ok((0x2E3C, 0x5751)));
+
+    config.options.insert("pid".into(), "5752".into());
+    assert_eq!(adapter.wanted_identity(&config), Ok((0x2E3C, 0x5752)));
+
+    config.options.insert("vid".into(), "0x2E3C".into());
+    assert!(adapter.wanted_identity(&config).is_err());
 }

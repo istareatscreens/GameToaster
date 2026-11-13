@@ -258,7 +258,6 @@
       "plan_missing_install": "缺少已核准的安裝計畫",
       "plan_missing_update": "缺少已核准的更新計畫",
       "plan_missing_replacement": "缺少已核准的取代計畫",
-      "modification_unapproved": "使用者修改的檔案沒有已核准的操作：%{path}",
       "modification_invalid": "已核准的操作對 %{path} 無效",
       "deploy_commit_restored": "設定提交失敗，已還原外掛部署：%{error}",
       "deploy_commit_unrecovered": "設定提交失敗（%{error}）；部署復原需要處理：%{recovery}",

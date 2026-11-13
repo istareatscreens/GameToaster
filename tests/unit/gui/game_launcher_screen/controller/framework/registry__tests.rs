@@ -96,3 +96,48 @@ fn the_built_in_registry_is_every_ring_device() {
         .unwrap();
     assert!(registry.default_config(FAKE_DESCRIPTOR.id).is_ok());
 }
+
+fn found_by_the_ring_drivers(present: &[(u16, u16, usize)]) -> Vec<DiscoveredController> {
+    use super::super::super::devices::{adx_hid, adx_io4, ndx_hid, ndx_io4};
+    let mut found = adx_hid::adapter().match_present(present);
+    found.extend(adx_io4::adapter().match_present(present));
+    found.extend(ndx_hid::adapter().match_present(present));
+    found.extend(ndx_io4::adapter().match_present(present));
+    found
+}
+
+#[test]
+fn a_ring_two_drivers_can_read_is_offered_once() {
+    let found = found_by_the_ring_drivers(&[(0x2E3C, 0x5750, 33)]);
+    assert_eq!(found.len(), 2);
+    let offered = offered_once(found);
+    assert_eq!(offered.len(), 1);
+    assert_eq!(offered[0].config.driver_id, "adx-hid");
+
+    let offered = offered_once(found_by_the_ring_drivers(&[(0x0CA3, 0x0021, 64)]));
+    assert_eq!(offered.len(), 1);
+    assert_eq!(offered[0].config.driver_id, "adx-io4");
+}
+
+#[test]
+fn different_devices_are_all_offered() {
+    let offered = offered_once(found_by_the_ring_drivers(&[
+        (0x0CA3, 0x0021, 64),
+        (0x2E3C, 0x5750, 33),
+    ]));
+    let drivers: Vec<&str> = offered
+        .iter()
+        .map(|controller| controller.config.driver_id.as_str())
+        .collect();
+    assert_eq!(drivers, vec!["adx-hid", "adx-io4"]);
+
+    let offered = offered_once(found_by_the_ring_drivers(&[
+        (0x2E3C, 0x5750, 33),
+        (0x2E4C, 0x5750, 33),
+    ]));
+    assert_eq!(offered.len(), 2);
+    assert_eq!(offered[0].config.options.get("vid").unwrap(), "2E3C");
+    assert_eq!(offered[1].config.options.get("vid").unwrap(), "2E4C");
+
+    assert!(offered_once(Vec::new()).is_empty());
+}

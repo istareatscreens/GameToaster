@@ -35,8 +35,15 @@ impl ButtonDecoder for DaoDecoder {
             }
         }
 
-        if data[6] & 0x08 != 0 {
-            word.set(Button::Select);
+        for (mask, button) in [
+            (0x01, Button::Coin),
+            (0x02, Button::Down),
+            (0x04, Button::Select),
+            (0x08, Button::Up),
+        ] {
+            if data[6] & mask != 0 {
+                word.set(button);
+            }
         }
         Ok(word)
     }

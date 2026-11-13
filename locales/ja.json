@@ -258,7 +258,6 @@
       "plan_missing_install": "承認済みのインストール計画がありません",
       "plan_missing_update": "承認済みの更新計画がありません",
       "plan_missing_replacement": "承認済みの置き換え計画がありません",
-      "modification_unapproved": "ユーザーが変更したファイルに承認済みの処理がありません：%{path}",
       "modification_invalid": "承認済みの処理は %{path} には無効です",
       "deploy_commit_restored": "設定ファイルの保存に失敗したため、プラグインの配置を元に戻しました：%{error}",
       "deploy_commit_unrecovered": "設定ファイルの保存に失敗しました（%{error}）。配置の復旧に対応が必要です：%{recovery}",

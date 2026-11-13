@@ -3,13 +3,18 @@ use std::sync::Arc;
 use super::super::framework::descriptor::{
     ControllerDriverDescriptor, ControllerOptionDescriptor, ControllerOptionKind,
 };
-use super::super::transport::hid::HidAdapter;
+use super::super::transport::hid::{HidAdapter, HidUnits};
 use super::ring_bindings::RING_BINDINGS;
 use report::{DaoDecoder, DEFAULT_PID, DEFAULT_VID, REPORT_SIZE};
 
 mod report;
 
 const IDENTITIES: &[(u16, u16)] = &[(DEFAULT_VID, DEFAULT_PID)];
+
+const UNITS: HidUnits = HidUnits {
+    feature_byte: 4,
+    settings: &[1, 2],
+};
 const OPTIONS: &[ControllerOptionDescriptor] = &[
     ControllerOptionDescriptor {
         key: "vid",
@@ -34,7 +39,13 @@ pub(super) static DESCRIPTOR: ControllerDriverDescriptor = ControllerDriverDescr
 };
 
 pub(in crate::gui::game_launcher_screen::controller) fn adapter() -> HidAdapter {
-    HidAdapter::new(&DESCRIPTOR, IDENTITIES, REPORT_SIZE, Arc::new(decoder()))
+    HidAdapter::with_units(
+        &DESCRIPTOR,
+        IDENTITIES,
+        REPORT_SIZE,
+        Arc::new(decoder()),
+        UNITS,
+    )
 }
 
 #[cfg(test)]

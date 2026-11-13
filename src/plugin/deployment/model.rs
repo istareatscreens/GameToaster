@@ -107,8 +107,10 @@ pub struct FileProvenance {
     pub destination: PathBuf,
     pub first_install_original: FirstInstallOriginal,
     pub backup_chain: Vec<BackupRecord>,
+
     pub last_deployed_sha256: String,
     pub add_to_config_menu: bool,
+
     #[serde(default)]
     pub user_kept_current: bool,
 }

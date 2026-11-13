@@ -6,6 +6,8 @@ pub const CANVAS: Color32 = SKY_TOP;
 
 pub const LIST_PANEL: Color32 = Color32::from_rgb(0xC5, 0xCF, 0xFE);
 pub const ROW_CREAM: Color32 = Color32::from_rgb(0xFF, 0xF4, 0xE0);
+
+pub const ROW_SELECTED: Color32 = Color32::WHITE;
 pub const ICON_TILE: Color32 = Color32::from_rgb(0xFF, 0xFB, 0xF2);
 pub const BANNER_LAVENDER: Color32 = Color32::from_rgb(0xDC, 0xE0, 0xFB);
 

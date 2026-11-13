@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 
 use super::{
-    model, AssignmentLedger, AssignmentState, BackupRecord, FileCommitState, FirstInstallOriginal,
-    TransactionKind, TransactionState,
+    is_operator_owned, model, AssignmentLedger, AssignmentState, BackupRecord, FileCommitState,
+    FirstInstallOriginal, TransactionKind, TransactionState,
 };
 use crate::plugin::catalog::inventory::sha256_file;
-use crate::plugin::paths::DeploymentPlan;
+use crate::plugin::paths::{DeploymentPlan, PlannedFile};
 use crate::support::paths::{path_key, paths_equal};
 
 pub(super) fn apply_committed_plan(
@@ -44,29 +44,7 @@ pub(super) fn apply_committed_plan(
                 )
             })?;
         if transaction_file.state == FileCommitState::KeptByUser {
-            let current = sha256_file(&planned.destination)?;
-            if let Some(existing) = ledger
-                .files
-                .iter_mut()
-                .find(|file| paths_equal(&file.destination, &planned.destination))
-            {
-                existing.last_deployed_sha256 = current;
-                existing.user_kept_current = true;
-            } else {
-                ledger.files.push(model::FileProvenance {
-                    kind: planned.kind,
-                    source_relative: planned.source_relative.clone(),
-                    source: planned.source.clone(),
-                    destination: planned.destination.clone(),
-                    first_install_original: FirstInstallOriginal::Preserved {
-                        sha256: current.clone(),
-                    },
-                    backup_chain: Vec::new(),
-                    last_deployed_sha256: current,
-                    add_to_config_menu: planned.add_to_config_menu,
-                    user_kept_current: true,
-                });
-            }
+            record_kept(ledger, planned)?;
             continue;
         }
         let backup_record = transaction_file
@@ -89,12 +67,7 @@ pub(super) fn apply_committed_plan(
             if let Some(backup) = backup_record {
                 existing.backup_chain.push(backup);
             }
-            existing.kind = planned.kind;
-            existing.source_relative = planned.source_relative.clone();
-            existing.source = planned.source.clone();
-            existing.last_deployed_sha256 = planned.source_sha256.clone();
-            existing.add_to_config_menu = planned.add_to_config_menu;
-            existing.user_kept_current = false;
+            follow_plan(existing, planned, false);
         } else {
             let first_install_original = match &backup_record {
                 Some(backup) => FirstInstallOriginal::Existing {
@@ -153,5 +126,46 @@ pub(super) fn apply_committed_plan(
     ledger.resolved_watch_target = plan.resolved_watch_target.clone();
     ledger.state = AssignmentState::Active;
     ledger.transactions[transaction_index].state = TransactionState::Committed;
+    Ok(())
+}
+
+fn follow_plan(record: &mut model::FileProvenance, planned: &PlannedFile, kept_by_operator: bool) {
+    record.kind = planned.kind;
+    record.source_relative = planned.source_relative.clone();
+    record.source = planned.source.clone();
+    record.last_deployed_sha256 = planned.source_sha256.clone();
+    record.add_to_config_menu = planned.add_to_config_menu;
+    record.user_kept_current = kept_by_operator;
+}
+
+fn record_kept(ledger: &mut AssignmentLedger, planned: &PlannedFile) -> Result<(), String> {
+    let existing = ledger
+        .files
+        .iter_mut()
+        .find(|file| paths_equal(&file.destination, &planned.destination));
+    match existing {
+        Some(existing) if is_operator_owned(planned.kind) => {
+            existing.last_deployed_sha256 = sha256_file(&planned.destination)?;
+            existing.user_kept_current = true;
+        }
+
+        Some(existing) => follow_plan(existing, planned, true),
+        None => {
+            let current = sha256_file(&planned.destination)?;
+            ledger.files.push(model::FileProvenance {
+                kind: planned.kind,
+                source_relative: planned.source_relative.clone(),
+                source: planned.source.clone(),
+                destination: planned.destination.clone(),
+                first_install_original: FirstInstallOriginal::Preserved {
+                    sha256: current.clone(),
+                },
+                backup_chain: Vec::new(),
+                last_deployed_sha256: current,
+                add_to_config_menu: planned.add_to_config_menu,
+                user_kept_current: true,
+            });
+        }
+    }
     Ok(())
 }

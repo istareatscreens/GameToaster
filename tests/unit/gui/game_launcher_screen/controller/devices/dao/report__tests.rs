@@ -26,22 +26,39 @@ fn each_ring_button_is_one_bit_of_its_own_byte() {
 }
 
 #[test]
-fn the_player_select_is_its_own_bit_and_the_cabinet_keys_drive_nothing() {
-    let mut raw = vec![0u8; REPORT_SIZE];
-    raw[1 + 6] = 0x08;
-    assert_eq!(
-        pressed(DaoDecoder.decode(&raw).unwrap()),
-        vec![Button::Select]
-    );
-    for mask in [0x01, 0x02, 0x04] {
+fn the_function_keys_are_named_as_on_every_ring() {
+    for (mask, button) in [
+        (0x01, Button::Coin),
+        (0x02, Button::Down),
+        (0x04, Button::Select),
+        (0x08, Button::Up),
+    ] {
         let mut raw = vec![0u8; REPORT_SIZE];
         raw[1 + 6] = mask;
         assert_eq!(
-            DaoDecoder.decode(&raw).unwrap(),
-            ButtonWord::EMPTY,
+            pressed(DaoDecoder.decode(&raw).unwrap()),
+            vec![button],
             "mask {mask:#x}"
         );
     }
+    let mut raw = vec![0u8; REPORT_SIZE];
+    raw[1 + 6] = 0xF0;
+    assert_eq!(DaoDecoder.decode(&raw).unwrap(), ButtonWord::EMPTY);
+}
+
+#[test]
+fn the_reference_report_presses_its_buttons_and_keys() {
+    let raw = [0x00, 0x01, 0x80, 0x03, 0x02, 0x80, 0x05, 0x0D];
+    assert_eq!(
+        pressed(DaoDecoder.decode(&raw).unwrap()),
+        vec![
+            Button::Coin,
+            Button::Ba1,
+            Button::Ba3,
+            Button::Select,
+            Button::Up
+        ]
+    );
 }
 
 #[test]

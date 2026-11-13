@@ -261,13 +261,9 @@ pub(super) fn validate_modification_approval(
     use crate::plugin::deployment::ModificationPurpose;
     for modification in modifications {
         let key = crate::plugin::deployment::decision_key(&modification.destination);
-        let decision = decisions.get(&key).copied().ok_or_else(|| {
-            t!(
-                "plugins.error.modification_unapproved",
-                path => modification.destination.display().to_string()
-            )
-            .to_string()
-        })?;
+        let Some(decision) = decisions.get(&key).copied() else {
+            continue;
+        };
         let valid = match modification.purpose {
             ModificationPurpose::ReplaceWithPlugin => matches!(
                 decision,

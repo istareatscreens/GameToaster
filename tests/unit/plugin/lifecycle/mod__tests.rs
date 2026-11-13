@@ -56,7 +56,7 @@ fn import(catalog: &Catalog, root: &Path, version: &str, bytes: &[u8]) -> Catalo
 }
 
 fn fixture() -> Fixture {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::plugin::fixtures::canonical_tempdir();
     let catalog_root = root.path().join("catalog");
     let state_root = root.path().join("state");
     let app_root = root.path().join("app");
@@ -492,29 +492,353 @@ fn no_planner_can_demand_a_decision_for_a_configuration_file() {
     );
 }
 
-#[test]
-fn a_modified_plugin_binary_still_refuses_the_launch() {
-    let fixture = fixture();
-    let source = fixture.source_root.with_file_name("source-config-v1");
-    import_config_package(&fixture.catalog, &source, "1.0.0", b"one");
+const CHANGED_PLUGIN_ID: &str = "org.example.changedfiles";
 
+fn import_files(catalog: &Catalog, root: &Path, version: &str, files: &[(&str, &[u8])]) {
+    for (location, bytes) in files {
+        let path = root.join(location);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+    let manifest = Manifest {
+        manifest_version: 1,
+        plugin_id: CHANGED_PLUGIN_ID.into(),
+        plugin_version: Version::parse(version).unwrap(),
+        label: "Changed files".into(),
+        description: "Operator-changed files test plugin".into(),
+        is_patcher: false,
+        game_launcher: None,
+        executable_watch: None,
+        executable_watch_type: None,
+        runtime: None,
+        config_files: Vec::new(),
+        plugin_files: files
+            .iter()
+            .map(|(location, _)| PluginFile {
+                plugin_file_location: (*location).into(),
+                plugin_file_copy_type: CopyType::GameFolder,
+                plugin_file_replace_path: None,
+            })
+            .collect(),
+        install_scripts: Vec::new(),
+    };
+    fs::write(
+        root.join("manifest.toml"),
+        manifest.canonical_toml().unwrap(),
+    )
+    .unwrap();
+    match catalog
+        .import_manifest(&root.join("manifest.toml"))
+        .unwrap()
+    {
+        ImportOutcome::Imported(_) | ImportOutcome::AlreadyPresent(_) => {}
+    }
+}
+
+fn changed_files_request(fixture: &Fixture) -> ReconcileRequest {
+    ReconcileRequest {
+        assignment_id: "d".repeat(32),
+        plugin_id: CHANGED_PLUGIN_ID.into(),
+        game_id: 1,
+        selected_target: fixture.game_one.join("game.exe"),
+        policy: RevisionPolicy::TrackLatest {
+            allow_prerelease: false,
+        },
+        choices: ResolutionChoices::default(),
+        copy_zero_matches_to_game_folder: false,
+        search_directory_destinations: false,
+        modification_decisions: BTreeMap::new(),
+    }
+}
+
+fn names_in(folder: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(folder)
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn a_launch_with_a_changed_plugin_file_deploys_nothing_and_records_no_transaction() {
+    let fixture = fixture();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v1"),
+        "1.0.0",
+        &[("payload.bin", b"one"), ("extra.bin", b"extra-one")],
+    );
+    let payload = fixture.game_one.join("payload.bin");
+    let installed = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    let ledger_path = installed.reconciliation.ledger_reference.clone();
+    assert!(installed.reconciliation.changed);
+    assert!(installed.reconciliation.kept_files.is_empty());
+    installed.finish();
+
+    fs::write(&payload, b"operator-build").unwrap();
+    let ledger_before = fs::read(&ledger_path).unwrap();
+    let names_before = names_in(&fixture.game_one);
+
+    for attempt in 0..3 {
+        let prepared = fixture
+            .service
+            .reconcile_for_launch(changed_files_request(&fixture))
+            .unwrap_or_else(|error| panic!("launch attempt {attempt} was refused: {error}"));
+        assert!(
+            !prepared.reconciliation.changed,
+            "launch attempt {attempt} deployed"
+        );
+        assert_eq!(
+            prepared.reconciliation.kept_files,
+            std::slice::from_ref(&payload)
+        );
+        prepared.finish();
+        assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+        assert_eq!(
+            fs::read(fixture.game_one.join("extra.bin")).unwrap(),
+            b"extra-one"
+        );
+        assert_eq!(
+            fs::read(&ledger_path).unwrap(),
+            ledger_before,
+            "launch attempt {attempt} recorded a transaction"
+        );
+        assert_eq!(
+            names_in(&fixture.game_one),
+            names_before,
+            "launch attempt {attempt} wrote or backed up a file"
+        );
+    }
+}
+
+#[test]
+fn a_launch_with_a_missing_plugin_file_writes_it_back() {
+    let fixture = fixture();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v1"),
+        "1.0.0",
+        &[("payload.bin", b"one"), ("extra.bin", b"extra-one")],
+    );
+    let payload = fixture.game_one.join("payload.bin");
+    fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap()
+        .finish();
+    fs::remove_file(&payload).unwrap();
+
+    let prepared = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .expect("a missing plugin file must not refuse the launch");
+    assert!(prepared.reconciliation.changed);
+    assert!(prepared.reconciliation.kept_files.is_empty());
+    prepared.finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"one");
+
+    let again = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    assert!(!again.reconciliation.changed);
+    again.finish();
+}
+
+#[test]
+fn a_launch_with_an_update_due_updates_the_other_files_and_keeps_the_changed_one() {
+    let fixture = fixture();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v1"),
+        "1.0.0",
+        &[("payload.bin", b"one"), ("extra.bin", b"extra-one")],
+    );
+    let payload = fixture.game_one.join("payload.bin");
+    let extra = fixture.game_one.join("extra.bin");
+    fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap()
+        .finish();
+    fs::write(&payload, b"operator-build").unwrap();
+
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v2"),
+        "2.0.0",
+        &[("moved/payload.bin", b"two"), ("extra.bin", b"extra-two")],
+    );
+    let updated = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .expect("an update must not be refused by a changed plugin file");
+    assert_eq!(
+        updated.reconciliation.revision.plugin_version,
+        Version::parse("2.0.0").unwrap()
+    );
+    assert!(updated.reconciliation.changed);
+    assert_eq!(
+        updated.reconciliation.kept_files,
+        std::slice::from_ref(&payload)
+    );
+    let ledger_path = updated.reconciliation.ledger_reference.clone();
+    updated.finish();
+    assert_eq!(fs::read(&extra).unwrap(), b"extra-two");
+    assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+
+    let ledger_before = fs::read(&ledger_path).unwrap();
+    for attempt in 0..3 {
+        let prepared = fixture
+            .service
+            .reconcile_for_launch(changed_files_request(&fixture))
+            .unwrap();
+        assert!(
+            !prepared.reconciliation.changed,
+            "launch attempt {attempt} after the update deployed again"
+        );
+        assert_eq!(
+            prepared.reconciliation.kept_files,
+            std::slice::from_ref(&payload)
+        );
+        prepared.finish();
+        assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+        assert_eq!(fs::read(&ledger_path).unwrap(), ledger_before);
+    }
+
+    fs::remove_file(&extra).unwrap();
+    let repaired = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    assert!(repaired.reconciliation.changed);
+    assert_eq!(
+        repaired.reconciliation.kept_files,
+        std::slice::from_ref(&payload)
+    );
+    repaired.finish();
+    assert_eq!(fs::read(&extra).unwrap(), b"extra-two");
+    assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+
+    fs::remove_file(&payload).unwrap();
+    let restored = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    assert!(restored.reconciliation.changed);
+    assert!(restored.reconciliation.kept_files.is_empty());
+    restored.finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"two");
+    assert_eq!(fs::read(&extra).unwrap(), b"extra-two");
+}
+
+#[test]
+fn a_kept_file_that_holds_the_plugins_own_bytes_again_is_updated_by_the_next_version() {
+    let fixture = fixture();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v1"),
+        "1.0.0",
+        &[("payload.bin", b"one")],
+    );
+    let payload = fixture.game_one.join("payload.bin");
+    fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap()
+        .finish();
+    fs::write(&payload, b"operator-build").unwrap();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v2"),
+        "2.0.0",
+        &[("payload.bin", b"two")],
+    );
+    let updated = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    assert_eq!(
+        updated.reconciliation.kept_files,
+        std::slice::from_ref(&payload)
+    );
+    updated.finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+
+    fs::write(&payload, b"two").unwrap();
+    let current = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    assert!(!current.reconciliation.changed);
+    assert!(current.reconciliation.kept_files.is_empty());
+    current.finish();
+
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v3"),
+        "3.0.0",
+        &[("payload.bin", b"three")],
+    );
+    let next = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    assert_eq!(
+        next.reconciliation.revision.plugin_version,
+        Version::parse("3.0.0").unwrap()
+    );
+    assert!(next.reconciliation.kept_files.is_empty());
+    next.finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"three");
+}
+
+#[test]
+fn a_launch_names_no_configuration_file_as_kept() {
+    let fixture = fixture();
+    import_config_package(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-config-v1"),
+        "1.0.0",
+        b"one",
+    );
     fixture
         .service
         .reconcile_for_launch(config_request(1, &fixture.game_one, 'c'))
         .unwrap()
         .finish();
+    fs::write(fixture.game_one.join("config.ini"), b"operator-tuned").unwrap();
 
-    fs::write(fixture.game_one.join("payload.bin"), b"operator-swapped").unwrap();
-    match fixture
+    let current = fixture
         .service
         .reconcile_for_launch(config_request(1, &fixture.game_one, 'c'))
-    {
-        Ok(_) => panic!("a replaced plugin binary must still stop the launch"),
-        Err(error) => assert!(
-            error.contains("decision required"),
-            "unexpected refusal reason: {error}"
-        ),
-    }
+        .unwrap();
+    assert!(!current.reconciliation.changed);
+    assert!(current.reconciliation.kept_files.is_empty());
+    current.finish();
+
+    import_config_package(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-config-v2"),
+        "2.0.0",
+        b"two",
+    );
+    let updated = fixture
+        .service
+        .reconcile_for_launch(config_request(1, &fixture.game_one, 'c'))
+        .unwrap();
+    assert!(updated.reconciliation.changed);
+    assert!(updated.reconciliation.kept_files.is_empty());
+    updated.finish();
+    assert_eq!(
+        fs::read(fixture.game_one.join("config.ini")).unwrap(),
+        b"operator-tuned"
+    );
 }
 
 #[test]

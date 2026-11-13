@@ -21,3 +21,8 @@ fn it_opens_the_rings_own_interface_class_on_interface_zero() {
     );
     assert_eq!(INTERFACE_NUMBER, 0);
 }
+
+#[test]
+fn it_reads_the_rings_reports_from_in_endpoint_one() {
+    assert_eq!(IN_ENDPOINT, 0x81);
+}

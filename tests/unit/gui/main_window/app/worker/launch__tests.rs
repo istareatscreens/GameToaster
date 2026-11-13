@@ -74,6 +74,36 @@ fn a_launch_asks_for_exactly_the_pinned_revision_or_the_latest_stable_one() {
     assert!(reconcile_request(&plain).is_err());
 }
 
+#[test]
+fn the_files_a_launch_left_with_the_operator_reach_the_log_when_diagnostics_are_on() {
+    let root = tempfile::tempdir().unwrap();
+    let log = LauncherLog::open(root.path()).unwrap();
+    let written = || std::fs::read_to_string(root.path().join("GameToaster.log")).unwrap();
+    let kept = [
+        PathBuf::from(r"C:\games\hook.dll"),
+        PathBuf::from(r"C:\games\tools\helper.exe"),
+    ];
+
+    log_kept_files(&log, GameId(7), &kept);
+    assert_eq!(written(), "", "diagnostics logging is off by default");
+
+    log.set_enabled(true);
+    log_kept_files(&log, GameId(7), &[]);
+    assert_eq!(written(), "", "a launch that kept nothing names nothing");
+
+    log_kept_files(&log, GameId(7), &kept);
+    let lines: Vec<String> = written().lines().map(str::to_owned).collect();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    for (line, path) in lines.iter().zip([
+        r#"path="C:\\games\\hook.dll""#,
+        r#"path="C:\\games\\tools\\helper.exe""#,
+    ]) {
+        assert!(line.contains("operation=plugin-file-kept"), "{line}");
+        assert!(line.contains(r#"game_id="7""#), "{line}");
+        assert!(line.contains(path), "{line}");
+    }
+}
+
 mod scripts {
     use std::time::{Duration, Instant};
 
@@ -358,5 +388,124 @@ mod scripts {
             "{followed:?}"
         );
         let _ = harness.context.processes.stop_game(entry.id);
+    }
+}
+
+mod operator_files {
+    use std::fs;
+
+    use super::super::super::fixtures::{config, game, released_handoff, Harness};
+    use super::super::super::messages::WorkerResult;
+    use crate::launcher_gui::model::{PluginAssignment, PluginRevision, PluginUpdatePolicy};
+    use crate::launcher_gui::runtime::LaunchCancel;
+    use crate::plugin::catalog::{CatalogRevision, ImportOutcome};
+    use crate::plugin::manifest::{CopyType, Manifest, PluginFile};
+
+    fn import_plugin(harness: &Harness) -> CatalogRevision {
+        let package = harness.absent("package");
+        fs::create_dir_all(&package).unwrap();
+        fs::write(package.join("payload.bin"), b"plugin").unwrap();
+        let manifest = Manifest {
+            manifest_version: 1,
+            plugin_id: "org.example.operatorfiles".into(),
+            plugin_version: semver::Version::parse("1.0.0").unwrap(),
+            label: "Operator files".into(),
+            description: "A plugin with one file in the game folder".into(),
+            is_patcher: false,
+            game_launcher: None,
+            executable_watch: None,
+            executable_watch_type: None,
+            runtime: None,
+            config_files: Vec::new(),
+            plugin_files: vec![PluginFile {
+                plugin_file_location: "payload.bin".into(),
+                plugin_file_copy_type: CopyType::GameFolder,
+                plugin_file_replace_path: None,
+            }],
+            install_scripts: Vec::new(),
+        };
+        fs::write(
+            package.join("manifest.toml"),
+            manifest.canonical_toml().unwrap(),
+        )
+        .unwrap();
+        let backend = harness.context.plugin_backend.as_ref().unwrap();
+        match backend
+            .catalog
+            .import_manifest(&package.join("manifest.toml"))
+            .unwrap()
+        {
+            ImportOutcome::Imported(revision) | ImportOutcome::AlreadyPresent(revision) => revision,
+        }
+    }
+
+    #[test]
+    fn a_game_whose_plugin_file_the_operator_changed_starts_and_the_log_names_the_file() {
+        let mut harness = Harness::new();
+        let revision = import_plugin(&harness);
+        let mut entry = game(&harness.script("game.bat", "game", &[], 0));
+        entry.plugin = Some(PluginAssignment {
+            plugin_id: revision.plugin_id.clone(),
+            revision: PluginRevision {
+                version: revision.plugin_version.clone(),
+                sha256: revision.package_sha256.clone(),
+            },
+            update_policy: PluginUpdatePolicy::TrackLatest,
+            allow_prerelease: false,
+            copy_zero_matches_to_game_folder: false,
+            search_directory_destinations: false,
+            assignment_id: "0123456789abcdef0123456789abcdef".into(),
+            resolved_launcher: None,
+            resolved_watch_target: None,
+            grants: Vec::new(),
+            ledger_reference: harness.absent("ledger.toml"),
+        });
+        let payload = entry.selected_target.with_file_name("payload.bin");
+        harness.context.log.set_enabled(true);
+        let kept_lines = |harness: &Harness| -> Vec<String> {
+            fs::read_to_string(harness.context.launcher_dir.join("GameToaster.log"))
+                .unwrap()
+                .lines()
+                .filter(|line| line.contains("operation=plugin-file-kept"))
+                .map(str::to_owned)
+                .collect()
+        };
+
+        let launched = harness.context.launch(
+            entry.clone(),
+            config(&entry),
+            LaunchCancel::new(),
+            released_handoff(),
+        );
+        let WorkerResult::Launched { updated_config, .. } = launched else {
+            panic!("{launched:?}");
+        };
+        assert_eq!(fs::read(&payload).unwrap(), b"plugin");
+        harness.pump_until(|result| matches!(result, WorkerResult::GameExited(_)));
+        assert!(kept_lines(&harness).is_empty(), "nothing was kept yet");
+
+        fs::write(&payload, b"operator-build").unwrap();
+        let stored = updated_config
+            .expect("the first launch records the assignment")
+            .games[0]
+            .clone();
+        let launched = harness.context.launch(
+            stored.clone(),
+            config(&stored),
+            LaunchCancel::new(),
+            released_handoff(),
+        );
+        assert!(
+            matches!(launched, WorkerResult::Launched { .. }),
+            "{launched:?}"
+        );
+        harness.pump_until(|result| matches!(result, WorkerResult::GameExited(_)));
+        assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+        assert_eq!(harness.marks(), ["game", "game"]);
+
+        let kept = kept_lines(&harness);
+        assert_eq!(kept.len(), 1, "{kept:?}");
+        assert!(kept[0].contains(r#"game_id="1""#), "{}", kept[0]);
+        assert!(kept[0].contains(r#"payload.bin""#), "{}", kept[0]);
     }
 }

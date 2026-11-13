@@ -208,7 +208,7 @@ impl WashingMachineLayout {
                     }
                     painter.add(egui::Shape::convex_polygon(
                         points,
-                        theme::PRIMARY_ORANGE,
+                        theme::ROW_SELECTED,
                         Stroke::NONE,
                     ));
 

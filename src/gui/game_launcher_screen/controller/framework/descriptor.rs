@@ -93,18 +93,59 @@ impl ControllerDriverDescriptor {
             .find(|binding| binding.button == button)
             .map(|binding| binding.command)
     }
+
+    pub(in crate::gui::game_launcher_screen::controller) fn hex_u16(
+        self,
+        config: &ControllerConfig,
+        key: &str,
+    ) -> Result<u16, String> {
+        let option = self
+            .options
+            .iter()
+            .find(|option| option.key == key)
+            .ok_or_else(|| {
+                format!(
+                    "controller driver '{}' does not define option '{key}'",
+                    self.id
+                )
+            })?;
+        let ControllerOptionKind::HexU16 { non_zero } = option.kind else {
+            return Err(format!(
+                "controller option '{key}' of driver '{}' is not a hexadecimal value",
+                self.id
+            ));
+        };
+        hex_u16_value(option, non_zero, required_option(config, key)?)
+    }
+}
+
+fn hex_u16_value(
+    option: &ControllerOptionDescriptor,
+    non_zero: bool,
+    value: &str,
+) -> Result<u16, String> {
+    let entered = value.trim();
+    let digits = if entered.is_empty() {
+        option.default
+    } else {
+        entered
+    };
+    let parsed = digits
+        .bytes()
+        .all(|digit| digit.is_ascii_hexdigit())
+        .then(|| u16::from_str_radix(digits, 16).ok())
+        .flatten()
+        .ok_or_else(|| t!("controller.validation.hex", field => option.key).to_string())?;
+    if non_zero && parsed == 0 {
+        return Err(t!("controller.validation.nonzero_hid", field => option.key).to_string());
+    }
+    Ok(parsed)
 }
 
 fn validate_option(option: &ControllerOptionDescriptor, value: &str) -> Result<(), String> {
     match option.kind {
         ControllerOptionKind::HexU16 { non_zero } => {
-            let parsed = u16::from_str_radix(value.trim(), 16)
-                .map_err(|_| t!("controller.validation.hex", field => option.key).to_string())?;
-            if non_zero && parsed == 0 {
-                return Err(
-                    t!("controller.validation.nonzero_hid", field => option.key).to_string()
-                );
-            }
+            hex_u16_value(option, non_zero, value)?;
         }
         ControllerOptionKind::Text { allow_empty } => {
             if !allow_empty && value.trim().is_empty() {
@@ -139,14 +180,6 @@ pub(in crate::gui::game_launcher_screen::controller) fn required_option<'a>(
         .get(key)
         .map(String::as_str)
         .ok_or_else(|| format!("controller option '{key}' is missing"))
-}
-
-pub(in crate::gui::game_launcher_screen::controller) fn hex_u16_option(
-    config: &ControllerConfig,
-    key: &str,
-) -> Result<u16, String> {
-    u16::from_str_radix(required_option(config, key)?.trim(), 16)
-        .map_err(|_| format!("controller option '{key}' is not a hexadecimal 16-bit value"))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

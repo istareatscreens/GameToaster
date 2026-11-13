@@ -36,6 +36,8 @@ pub struct ReconcileResult {
     pub config_targets: Vec<PathBuf>,
     pub runtime: Option<ResolvedRuntime>,
     pub changed: bool,
+
+    pub kept_files: Vec<PathBuf>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

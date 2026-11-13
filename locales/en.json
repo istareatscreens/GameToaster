@@ -258,7 +258,6 @@
       "plan_missing_install": "approved install plan is missing",
       "plan_missing_update": "approved update plan is missing",
       "plan_missing_replacement": "approved replacement plan is missing",
-      "modification_unapproved": "user-modified file has no approved action: %{path}",
       "modification_invalid": "approved action is invalid for %{path}",
       "deploy_commit_restored": "configuration commit failed and plugin deployment was restored: %{error}",
       "deploy_commit_unrecovered": "configuration commit failed (%{error}); deployment recovery requires attention: %{recovery}",

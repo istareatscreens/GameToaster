@@ -1,12 +1,14 @@
 pub(super) mod adx_hid;
 pub(super) mod adx_io4;
 pub(super) mod dao;
+mod io4_report;
 pub(super) mod jvs;
 mod led_board;
 pub(super) mod ndx_hid;
 pub(super) mod ndx_io4;
 pub(super) mod npro;
 mod ring_bindings;
+mod yuan_hid_report;
 
 use std::sync::Arc;
 

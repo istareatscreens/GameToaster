@@ -117,19 +117,22 @@ impl LifecycleService {
                 revision.plugin_id, revision.plugin_version
             ));
         }
-        let unchanged = existing
+        let current = existing
             .as_ref()
-            .is_some_and(|ledger| fully_current(ledger, &plan, self.deployment.path_policy()));
-        let ledger = if unchanged {
-            existing.expect("checked as present")
-        } else {
-            self.deployment.deploy(
-                &request.assignment_id,
-                &revision.plugin_version.to_string(),
-                &plan,
-                &request.modification_decisions,
-                FailureInjection::default(),
-            )?
+            .and_then(|ledger| fully_current(ledger, &plan, self.deployment.path_policy()));
+        let (ledger, kept_files, changed) = match (existing, current) {
+            (Some(ledger), Some(kept_files)) => (ledger, kept_files, false),
+            _ => {
+                let ledger = self.deployment.deploy(
+                    &request.assignment_id,
+                    &revision.plugin_version.to_string(),
+                    &plan,
+                    &request.modification_decisions,
+                    FailureInjection::default(),
+                )?;
+                let kept_files = ledger.kept_by_operator();
+                (ledger, kept_files, true)
+            }
         };
         let ledger_reference = self
             .deployment
@@ -142,7 +145,8 @@ impl LifecycleService {
             runtime,
             ledger,
             ledger_reference,
-            changed: !unchanged,
+            changed,
+            kept_files,
         };
         let activity = work.reserve_game()?;
         Ok(PreparedLaunch {
@@ -229,7 +233,7 @@ fn fully_current(
     ledger: &AssignmentLedger,
     plan: &super::paths::DeploymentPlan,
     policy: &super::paths::PathPolicy,
-) -> bool {
+) -> Option<Vec<PathBuf>> {
     if ledger.validate().is_err()
         || ledger.state != AssignmentState::Active
         || ledger.plugin_id != plan.plugin_id
@@ -248,27 +252,33 @@ fn fully_current(
         })
         || revalidate_plan(plan, policy).is_err()
     {
-        return false;
+        return None;
     }
-    plan.files.iter().all(|planned| {
-        ledger
+    let mut kept = Vec::new();
+    for planned in &plan.files {
+        let managed = ledger
             .files
             .iter()
-            .find(|managed| paths_equal(&managed.destination, &planned.destination))
-            .is_some_and(|managed| {
-                if managed.source_relative != planned.source_relative
-                    || managed.add_to_config_menu != planned.add_to_config_menu
-                {
-                    return false;
-                }
-                if is_operator_owned(managed.kind) {
-                    return managed.destination.is_file();
-                }
-                managed.last_deployed_sha256 == planned.source_sha256
-                    && sha256_file(&managed.destination).ok().as_deref()
-                        == Some(planned.source_sha256.as_str())
-            })
-    })
+            .find(|managed| paths_equal(&managed.destination, &planned.destination))?;
+        if managed.source_relative != planned.source_relative
+            || managed.add_to_config_menu != planned.add_to_config_menu
+        {
+            return None;
+        }
+        if is_operator_owned(managed.kind) {
+            if !managed.destination.is_file() {
+                return None;
+            }
+            continue;
+        }
+        let current = sha256_file(&managed.destination).ok();
+        if ledger.keeps_instead_of_writing(planned, current.as_deref()) {
+            kept.push(planned.destination.clone());
+        } else if current.as_deref() != Some(planned.source_sha256.as_str()) {
+            return None;
+        }
+    }
+    Some(kept)
 }
 
 #[cfg(test)]

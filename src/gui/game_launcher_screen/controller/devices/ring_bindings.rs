@@ -4,11 +4,11 @@ use crate::gui::game_launcher_screen::domain::command::LauncherCommand;
 
 pub(super) const RING_BINDINGS: &[ButtonBinding] = &[
     ButtonBinding {
-        button: Button::Ba2,
+        button: Button::Ba1,
         command: LauncherCommand::LauncherX,
     },
     ButtonBinding {
-        button: Button::Ba1,
+        button: Button::Ba2,
         command: LauncherCommand::ToggleMainWindow,
     },
     ButtonBinding {

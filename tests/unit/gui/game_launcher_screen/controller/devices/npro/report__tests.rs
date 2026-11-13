@@ -33,13 +33,34 @@ fn the_touch_sensors_press_nothing() {
 }
 
 #[test]
-fn only_the_players_select_of_the_cabinet_keys_is_read() {
-    assert!(NproDecoder
-        .decode(&report(0, 0x01))
-        .unwrap()
-        .contains(Button::Select));
+fn the_function_keys_are_named_as_on_every_ring() {
+    for (mask, button) in [
+        (0x01, Button::Up),
+        (0x02, Button::Coin),
+        (0x04, Button::Down),
+        (0x08, Button::Select),
+    ] {
+        assert_eq!(
+            NproDecoder.decode(&report(0, mask)).unwrap().bits(),
+            button.mask(),
+            "mask {mask:#x}"
+        );
+    }
     assert_eq!(
-        NproDecoder.decode(&report(0, 0x0E)).unwrap(),
+        NproDecoder.decode(&report(0, 0xF0)).unwrap(),
         ButtonWord::EMPTY
+    );
+}
+
+#[test]
+fn the_reference_report_presses_its_buttons_and_keys() {
+    let raw = [0x01, 0x00, 0x01, 0x00, 0x06, 0x80, 0x81, 0x0B];
+    assert_eq!(
+        NproDecoder.decode(&raw).unwrap().bits(),
+        Button::Ba1.mask()
+            | Button::Ba8.mask()
+            | Button::Up.mask()
+            | Button::Coin.mask()
+            | Button::Select.mask()
     );
 }

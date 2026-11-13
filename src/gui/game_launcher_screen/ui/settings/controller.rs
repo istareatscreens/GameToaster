@@ -96,7 +96,14 @@ fn show_driver_options(
             .entry(option.key.into())
             .or_insert_with(|| option.default.into());
         match option.kind {
-            ControllerOptionKind::HexU16 { .. } | ControllerOptionKind::Text { .. } => {
+            ControllerOptionKind::HexU16 { .. } => {
+                ui.horizontal(|ui| {
+                    ui.label(t!(option.label_key).to_string());
+
+                    ui.add(egui::TextEdit::singleline(value).hint_text(option.default));
+                });
+            }
+            ControllerOptionKind::Text { .. } => {
                 ui.horizontal(|ui| {
                     ui.label(t!(option.label_key).to_string());
                     ui.text_edit_singleline(value);

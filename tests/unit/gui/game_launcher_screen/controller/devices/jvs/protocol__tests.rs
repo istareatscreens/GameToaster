@@ -123,8 +123,8 @@ fn phase_b_coin_decrease_and_write_gpio_frames_are_exact() {
 #[test]
 fn all_jvs_ba_bits_match_the_verified_map() {
     let mapping = [
-        (11, Button::Ba1),
-        (10, Button::Ba2),
+        (10, Button::Ba1),
+        (11, Button::Ba2),
         (8, Button::Ba3),
         (7, Button::Ba4),
         (6, Button::Ba5),
@@ -142,5 +142,46 @@ fn all_jvs_ba_bits_match_the_verified_map() {
             decode_switch_response(&frame, 0).unwrap().bits(),
             button.mask()
         );
+    }
+}
+
+#[test]
+fn every_switch_word_performs_the_commands_it_always_did() {
+    use crate::game_launcher_screen::controller::devices::ring_bindings::RING_BINDINGS;
+    use crate::gui::game_launcher_screen::domain::command::LauncherCommand;
+
+    let bit_of = |command: LauncherCommand| -> u8 {
+        match command {
+            LauncherCommand::LauncherX => 1,
+            LauncherCommand::ToggleMainWindow => 2,
+            LauncherCommand::Launch => 4,
+            LauncherCommand::Next => 8,
+            LauncherCommand::Previous => 16,
+            LauncherCommand::CancelLaunch => 32,
+        }
+    };
+    for switches in 0..=u16::MAX {
+        let frame = Frame {
+            destination: 0,
+            payload: vec![1, 1, 0, (switches >> 8) as u8, switches as u8],
+        };
+        let word = decode_switch_response(&frame, 0).unwrap();
+        let performed = RING_BINDINGS
+            .iter()
+            .filter(|binding| word.contains(binding.button))
+            .fold(0, |held, binding| held | bit_of(binding.command));
+        let mut golden = 0;
+        for (bit, command) in [
+            (10, LauncherCommand::LauncherX),
+            (11, LauncherCommand::ToggleMainWindow),
+            (7, LauncherCommand::Launch),
+            (5, LauncherCommand::Next),
+            (4, LauncherCommand::Previous),
+        ] {
+            if switches & (1 << bit) == 0 {
+                golden |= bit_of(command);
+            }
+        }
+        assert_eq!(performed, golden, "switch word {switches:#06x}");
     }
 }

@@ -89,6 +89,50 @@ fn descriptor_owned_connection_fields_validate_without_hidden_defaults() {
     assert!(draft.controller_config().unwrap_err().contains("endpoint"));
 }
 
+fn controller_section_texts(draft: &mut SettingsDraft) -> Vec<String> {
+    let context = egui::Context::default();
+    let mut action = SettingsAction::None;
+    let output = context.run_ui(egui::RawInput::default(), |ui| {
+        controller::show(ui, draft, &mut action);
+    });
+    crate::gui::common::harness::painted_texts(&output)
+        .into_iter()
+        .map(|(text, _)| text)
+        .collect()
+}
+
+#[test]
+fn an_emptied_identity_field_is_accepted_and_shows_the_drivers_own_as_its_hint() {
+    let _locale = crate::gui::common::harness::locale("en");
+    let mut draft = draft();
+    draft.value.controller =
+        crate::game_launcher_screen::default_controller_config("adx-io4").unwrap();
+    draft
+        .value
+        .controller
+        .options
+        .insert("vid".into(), String::new());
+
+    assert_eq!(
+        draft.controller_config().unwrap().options.get("vid"),
+        Some(&String::new())
+    );
+    assert!(draft.selected_config().is_ok());
+
+    let texts = controller_section_texts(&mut draft);
+    assert!(texts.iter().any(|text| text == "0CA3"), "{texts:?}");
+    assert!(texts.iter().any(|text| text == "0021"), "{texts:?}");
+
+    draft
+        .value
+        .controller
+        .options
+        .insert("vid".into(), "1234".into());
+    let texts = controller_section_texts(&mut draft);
+    assert!(texts.iter().any(|text| text == "1234"), "{texts:?}");
+    assert!(!texts.iter().any(|text| text == "0CA3"), "{texts:?}");
+}
+
 #[test]
 fn discovered_driver_config_and_recommended_layout_apply_atomically() {
     let mut draft = draft();

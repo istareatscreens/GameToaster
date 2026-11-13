@@ -7,11 +7,9 @@ use super::super::framework::lights::TURN_OFF_ON_GAME_CLOSE;
 use super::super::transport::hid::HidAdapter;
 use super::led_board;
 use super::ring_bindings::RING_BINDINGS;
-use report::{AdxHidDecoder, ADX_HID_ALT_VID, ADX_HID_VID, DEFAULT_PID, REPORT_SIZE};
+use super::yuan_hid_report::{YuanHidReportDecoder, ALT_VID, PID, REPORT_SIZE, VID};
 
-mod report;
-
-const IDENTITIES: &[(u16, u16)] = &[(ADX_HID_VID, DEFAULT_PID), (ADX_HID_ALT_VID, DEFAULT_PID)];
+const IDENTITIES: &[(u16, u16)] = &[(VID, PID), (ALT_VID, PID)];
 const OPTIONS: &[ControllerOptionDescriptor] = &[
     ControllerOptionDescriptor {
         key: "vid",
@@ -38,16 +36,17 @@ pub(super) static DESCRIPTOR: ControllerDriverDescriptor = ControllerDriverDescr
 };
 
 pub(in crate::gui::game_launcher_screen::controller) fn adapter() -> HidAdapter {
-    HidAdapter::new(&DESCRIPTOR, IDENTITIES, REPORT_SIZE, Arc::new(decoder()))
+    HidAdapter::new(
+        &DESCRIPTOR,
+        IDENTITIES,
+        REPORT_SIZE,
+        Arc::new(YuanHidReportDecoder),
+    )
 }
 
 #[cfg(test)]
 pub(in crate::gui::game_launcher_screen::controller) fn identity() -> (u16, u16, usize) {
-    (ADX_HID_VID, DEFAULT_PID, REPORT_SIZE)
-}
-
-pub(in crate::gui::game_launcher_screen::controller) fn decoder() -> AdxHidDecoder {
-    AdxHidDecoder
+    (VID, PID, REPORT_SIZE)
 }
 
 #[cfg(test)]

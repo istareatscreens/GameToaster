@@ -165,8 +165,8 @@ pub(crate) fn decode_switch_response(
     let switches = u16::from_be_bytes([frame.payload[high], frame.payload[high + 1]]);
     let mut word = ButtonWord::EMPTY;
     for (bit, button) in [
-        (11, Button::Ba1),
-        (10, Button::Ba2),
+        (10, Button::Ba1),
+        (11, Button::Ba2),
         (8, Button::Ba3),
         (7, Button::Ba4),
         (6, Button::Ba5),

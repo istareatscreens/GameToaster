@@ -258,7 +258,6 @@
       "plan_missing_install": "缺少已批准的安装计划",
       "plan_missing_update": "缺少已批准的更新计划",
       "plan_missing_replacement": "缺少已批准的替换计划",
-      "modification_unapproved": "用户修改的文件没有已批准的操作：%{path}",
       "modification_invalid": "已批准的操作对 %{path} 无效",
       "deploy_commit_restored": "配置提交失败，已还原插件部署：%{error}",
       "deploy_commit_unrecovered": "配置提交失败（%{error}）；部署恢复需要处理：%{recovery}",

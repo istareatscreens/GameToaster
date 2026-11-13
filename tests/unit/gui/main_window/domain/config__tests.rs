@@ -200,6 +200,31 @@ fn malformed_controller_fields_are_rejected_with_field_context() {
 }
 
 #[test]
+fn an_emptied_controller_identity_field_is_valid_and_survives_save_and_load() {
+    let dir = test_dir("emptied-controller-identity");
+    let path = dir.join(FILE_NAME);
+
+    fs::write(
+        &path,
+        "[launcher]\nschema_version=4\nnext_game_id=1\n[game_launcher_screen]\ncontroller_driver=adx-hid\ncontroller_option.vid=\ncontroller_option.pid=5750\n",
+    )
+    .unwrap();
+    let loaded = load(&path).unwrap();
+    let controller = &loaded.settings.controller_screen.controller;
+    assert_eq!(controller.driver_id, "adx-hid");
+    assert_eq!(controller.options.get("vid"), Some(&String::new()));
+    assert_eq!(controller.options.get("pid"), Some(&"5750".to_string()));
+
+    save_atomic(&path, &loaded).unwrap();
+    let again = load(&path).unwrap();
+    assert_eq!(
+        again.settings.controller_screen.controller,
+        loaded.settings.controller_screen.controller
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn generic_driver_switch_removes_stale_option_keys() {
     let dir = test_dir("generic-controller-keys");
     let path = dir.join(FILE_NAME);

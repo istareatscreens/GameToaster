@@ -34,9 +34,15 @@ impl ButtonDecoder for NproDecoder {
                 word.set(button);
             }
         }
-
-        if report[7] & 0x01 != 0 {
-            word.set(Button::Select);
+        for (mask, button) in [
+            (0x01, Button::Up),
+            (0x02, Button::Coin),
+            (0x04, Button::Down),
+            (0x08, Button::Select),
+        ] {
+            if report[7] & mask != 0 {
+                word.set(button);
+            }
         }
         Ok(word)
     }

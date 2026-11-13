@@ -11,8 +11,9 @@ use windows::Win32::Devices::DeviceAndDriverInstallation::{
     SPDRP_HARDWAREID, SPDRP_SERVICE, SP_DEVICE_INTERFACE_DATA, SP_DEVINFO_DATA,
 };
 use windows::Win32::Devices::Usb::{
-    UsbdPipeTypeBulk, WinUsb_AbortPipe, WinUsb_Free, WinUsb_GetOverlappedResult, WinUsb_Initialize,
-    WinUsb_QueryInterfaceSettings, WinUsb_QueryPipe, WinUsb_ReadPipe, USB_INTERFACE_DESCRIPTOR,
+    UsbdPipeTypeBulk, UsbdPipeTypeInterrupt, WinUsb_AbortPipe, WinUsb_Free,
+    WinUsb_GetOverlappedResult, WinUsb_Initialize, WinUsb_QueryInterfaceSettings, WinUsb_QueryPipe,
+    WinUsb_ReadPipe, WinUsb_SetPowerPolicy, AUTO_SUSPEND, USBD_PIPE_TYPE, USB_INTERFACE_DESCRIPTOR,
     WINUSB_INTERFACE_HANDLE, WINUSB_PIPE_INFORMATION,
 };
 use windows::Win32::Foundation::{
@@ -31,9 +32,7 @@ use crate::game_launcher_screen::ControllerConfig;
 
 use super::super::framework::adapter::{ButtonDecoder, ControllerAdapter, ControllerSession};
 use super::super::framework::audit::ResourceAudit;
-use super::super::framework::descriptor::{
-    hex_u16_option, ControllerDriverDescriptor, DiscoveredController,
-};
+use super::super::framework::descriptor::{ControllerDriverDescriptor, DiscoveredController};
 use super::super::framework::events::{EventSink, SessionEvent};
 use super::handles::{ReaderGuard, TrackedHandle};
 
@@ -43,6 +42,7 @@ pub(in crate::gui::game_launcher_screen::controller) struct WinUsbAdapter {
     descriptor: &'static ControllerDriverDescriptor,
     identities: &'static [(u16, u16)],
     interface_number: u8,
+    in_endpoint: u8,
     interface_class: Option<GUID>,
     report_len: usize,
     decoder: Arc<dyn ButtonDecoder>,
@@ -53,6 +53,7 @@ impl WinUsbAdapter {
         descriptor: &'static ControllerDriverDescriptor,
         identities: &'static [(u16, u16)],
         interface_number: u8,
+        in_endpoint: u8,
         interface_class: Option<GUID>,
         report_len: usize,
         decoder: Arc<dyn ButtonDecoder>,
@@ -61,10 +62,18 @@ impl WinUsbAdapter {
             descriptor,
             identities,
             interface_number,
+            in_endpoint,
             interface_class,
             report_len,
             decoder,
         }
+    }
+
+    fn wanted_identity(&self, config: &ControllerConfig) -> Result<(u16, u16), String> {
+        Ok((
+            self.descriptor.hex_u16(config, "vid")?,
+            self.descriptor.hex_u16(config, "pid")?,
+        ))
     }
 }
 
@@ -96,11 +105,10 @@ impl ControllerAdapter for WinUsbAdapter {
         audit: Arc<ResourceAudit>,
     ) -> Result<Box<dyn ControllerSession>, String> {
         self.validate(config)?;
-        let vid = hex_u16_option(config, "vid")?;
-        let pid = hex_u16_option(config, "pid")?;
+        let (vid, pid) = self.wanted_identity(config)?;
         let path = find_path(vid, pid, self.interface_number, self.interface_class)
             .ok_or_else(|| format!("no USB controller {vid:04X}:{pid:04X} is connected"))?;
-        let device = Arc::new(open(&path, &audit)?);
+        let device = Arc::new(open(&path, self.in_endpoint, &audit)?);
         let cancellation = Arc::new(TrackedHandle::new(
             unsafe { CreateEventW(None, true, false, None) }
                 .map_err(|error| format!("failed to create USB cancellation event: {error}"))?,
@@ -334,9 +342,17 @@ pub(in crate::gui::game_launcher_screen::controller) fn node_interface(
 pub(in crate::gui::game_launcher_screen::controller) fn parse_guids(text: &str) -> Vec<GUID> {
     text.split(['\0', ';', ','])
         .map(|part| part.trim().trim_start_matches('{').trim_end_matches('}'))
-        .filter(|part| !part.is_empty())
-        .filter_map(|part| GUID::try_from(part).ok())
+        .filter(|part| is_guid_text(part))
+        .map(GUID::from)
         .collect()
+}
+
+fn is_guid_text(text: &str) -> bool {
+    text.len() == 36
+        && text.bytes().enumerate().all(|(at, byte)| match at {
+            8 | 13 | 18 | 23 => byte == b'-',
+            _ => byte.is_ascii_hexdigit(),
+        })
 }
 
 fn utf16_strings(bytes: &[u8]) -> Vec<String> {
@@ -476,7 +492,13 @@ fn find_path(vid: u16, pid: u16, number: u8, own_class: Option<GUID>) -> Option<
     }
 }
 
-fn open(path: &[u16], audit: &Arc<ResourceAudit>) -> Result<WinUsbDevice, String> {
+fn is_read_pipe(kind: USBD_PIPE_TYPE, id: u8, in_endpoint: u8) -> bool {
+    (kind == UsbdPipeTypeBulk || kind == UsbdPipeTypeInterrupt)
+        && id & 0x80 != 0
+        && id == in_endpoint
+}
+
+fn open(path: &[u16], in_endpoint: u8, audit: &Arc<ResourceAudit>) -> Result<WinUsbDevice, String> {
     let handle = unsafe {
         CreateFileW(
             PCWSTR(path.as_ptr()),
@@ -498,6 +520,16 @@ fn open(path: &[u16], audit: &Arc<ResourceAudit>) -> Result<WinUsbDevice, String
         in_pipe: 0,
         _file: file,
     };
+
+    let suspend_when_idle = 0u8;
+    let _ = unsafe {
+        WinUsb_SetPowerPolicy(
+            device.interface,
+            AUTO_SUSPEND,
+            1,
+            std::ptr::from_ref(&suspend_when_idle).cast(),
+        )
+    };
     let mut settings = USB_INTERFACE_DESCRIPTOR::default();
     unsafe { WinUsb_QueryInterfaceSettings(device.interface, 0, &mut settings) }
         .map_err(|error| format!("failed to read the controller's USB interface: {error}"))?;
@@ -506,13 +538,15 @@ fn open(path: &[u16], audit: &Arc<ResourceAudit>) -> Result<WinUsbDevice, String
         if unsafe { WinUsb_QueryPipe(device.interface, 0, endpoint, &mut pipe) }.is_err() {
             continue;
         }
-        if pipe.PipeType == UsbdPipeTypeBulk && pipe.PipeId & 0x80 != 0 {
+        if is_read_pipe(pipe.PipeType, pipe.PipeId, in_endpoint) {
             device.in_pipe = pipe.PipeId;
             break;
         }
     }
     if device.in_pipe == 0 {
-        return Err("the USB controller has no input pipe".into());
+        return Err(format!(
+            "the USB controller has no input pipe {in_endpoint:02X}"
+        ));
     }
     Ok(device)
 }

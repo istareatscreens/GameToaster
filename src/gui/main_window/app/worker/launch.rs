@@ -1,6 +1,6 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,6 +11,7 @@ use super::messages::{LaunchStage, WorkerCommand, WorkerResult};
 use super::plugin_runtime::{forward_runtime_events, run_runtime_operation, runtime_spec};
 use super::sessions::{ActiveWatch, CompletionPolicy, WatchedProgram};
 use crate::launcher_gui::config;
+use crate::launcher_gui::logging::LauncherLog;
 use crate::launcher_gui::model::{
     GameEntry, GameId, LauncherConfig, PluginRevision, PluginUpdatePolicy,
 };
@@ -147,6 +148,7 @@ impl WorkerContext {
                 .lifecycle;
             if game.plugin.is_some() {
                 let prepared = lifecycle.reconcile_for_launch(reconcile_request(&game)?)?;
+                log_kept_files(&self.log, game.id, &prepared.reconciliation.kept_files);
                 let record_changed = apply_reconciliation(&mut game, &prepared.reconciliation)?;
                 let stored = config
                     .games
@@ -375,6 +377,18 @@ impl WorkerContext {
             );
         }
         true
+    }
+}
+
+fn log_kept_files(log: &LauncherLog, game: GameId, kept: &[PathBuf]) {
+    for file in kept {
+        log.event(
+            "plugin-file-kept",
+            &[
+                ("game_id", game.to_string()),
+                ("path", file.display().to_string()),
+            ],
+        );
     }
 }
 

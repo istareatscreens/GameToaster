@@ -9,7 +9,7 @@ use super::{
 };
 use crate::plugin::catalog::inventory::sha256_file;
 use crate::plugin::paths::DeploymentPlan;
-use crate::support::paths::{path_key, paths_equal};
+use crate::support::paths::path_key;
 
 impl DeploymentEngine {
     pub(super) fn plan_deployment_transaction(
@@ -51,28 +51,20 @@ impl DeploymentEngine {
                 });
                 continue;
             }
-            let prior = ledger
-                .files
-                .iter()
-                .find(|file| paths_equal(&file.destination, &planned.destination));
-            let modified = prior.is_some_and(|file| {
-                current_hash.as_deref() != Some(file.last_deployed_sha256.as_str())
-            });
-            let decision = decisions.get(&path_key(&planned.destination)).copied();
-            if modified && decision.is_none() {
-                return Err(format!(
-                    "managed file was modified by the user; explicit keep/replace decision required: {}",
-                    planned.destination.display()
-                ));
-            }
-            if decision == Some(ModificationDecision::RestoreOriginal) {
-                return Err(format!(
-                    "restore-original is a removal decision, not a deployment decision: {}",
-                    planned.destination.display()
-                ));
-            }
+            let keep = match decisions.get(&path_key(&planned.destination)).copied() {
+                Some(ModificationDecision::KeepCurrent) => true,
+                Some(ModificationDecision::BackupAndOverwrite) => false,
+                Some(ModificationDecision::RestoreOriginal) => {
+                    return Err(format!(
+                        "restore-original is a removal decision, not a deployment decision: {}",
+                        planned.destination.display()
+                    ));
+                }
+
+                None => ledger.keeps_instead_of_writing(planned, current_hash.as_deref()),
+            };
             files.push(model::TransactionFile {
-                action: if decision == Some(ModificationDecision::KeepCurrent) {
+                action: if keep {
                     TransactionFileAction::KeepCurrent
                 } else {
                     TransactionFileAction::Write
@@ -85,7 +77,7 @@ impl DeploymentEngine {
                 pre_hash: current_hash,
                 transaction_backup: None,
                 recovery_path: None,
-                state: if decision == Some(ModificationDecision::KeepCurrent) {
+                state: if keep {
                     FileCommitState::KeptByUser
                 } else {
                     FileCommitState::Planned
@@ -119,22 +111,18 @@ impl DeploymentEngine {
                     });
                     continue;
                 }
-                let modified =
-                    current_hash.as_deref() != Some(managed.last_deployed_sha256.as_str());
-                let decision = decisions.get(&path_key(&managed.destination)).copied();
-                if modified && decision.is_none() {
-                    return Err(format!(
-                        "managed file removed by the new plugin version was modified by the user; explicit keep/restore decision required: {}",
-                        managed.destination.display()
-                    ));
-                }
-                if decision == Some(ModificationDecision::BackupAndOverwrite) {
-                    return Err(format!(
-                        "replace is not valid for a destination removed by the new plugin version: {}",
-                        managed.destination.display()
-                    ));
-                }
-                let keep = decision == Some(ModificationDecision::KeepCurrent);
+                let keep = match decisions.get(&path_key(&managed.destination)).copied() {
+                    Some(ModificationDecision::KeepCurrent) => true,
+                    Some(ModificationDecision::RestoreOriginal) => false,
+                    Some(ModificationDecision::BackupAndOverwrite) => {
+                        return Err(format!(
+                            "replace is not valid for a destination removed by the new plugin version: {}",
+                            managed.destination.display()
+                        ));
+                    }
+
+                    None => ledger.leaves_instead_of_restoring(managed, current_hash.as_deref()),
+                };
                 let (action, source, expected) = match &managed.first_install_original {
                     FirstInstallOriginal::Existing { backup, sha256 } => (
                         TransactionFileAction::RestoreOriginal,
@@ -204,21 +192,18 @@ impl DeploymentEngine {
                 });
                 continue;
             }
-            let modified = current_hash.as_deref() != Some(managed.last_deployed_sha256.as_str());
-            let decision = decisions.get(&path_key(&managed.destination)).copied();
-            if modified && decision.is_none() {
-                return Err(format!(
-                    "managed file was modified by the user; explicit keep/restore decision required: {}",
-                    managed.destination.display()
-                ));
-            }
-            if decision == Some(ModificationDecision::BackupAndOverwrite) {
-                return Err(format!(
-                    "replace is not a valid removal decision; choose keep-current or restore-original: {}",
-                    managed.destination.display()
-                ));
-            }
-            let keep = decision == Some(ModificationDecision::KeepCurrent);
+            let keep = match decisions.get(&path_key(&managed.destination)).copied() {
+                Some(ModificationDecision::KeepCurrent) => true,
+                Some(ModificationDecision::RestoreOriginal) => false,
+                Some(ModificationDecision::BackupAndOverwrite) => {
+                    return Err(format!(
+                        "replace is not a valid removal decision; choose keep-current or restore-original: {}",
+                        managed.destination.display()
+                    ));
+                }
+
+                None => ledger.leaves_instead_of_restoring(managed, current_hash.as_deref()),
+            };
             let source = match &managed.first_install_original {
                 FirstInstallOriginal::Existing { backup, sha256 } => {
                     if sha256_file(backup)? != *sha256 {

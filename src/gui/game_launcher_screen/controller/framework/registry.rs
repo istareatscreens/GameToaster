@@ -86,7 +86,7 @@ impl AdapterRegistry {
         for adapter in self.adapters.values() {
             discovered.extend(adapter.discover()?);
         }
-        Ok(discovered)
+        Ok(offered_once(discovered))
     }
 
     pub fn lights_request<'a>(&self, config: &'a ControllerConfig) -> Option<LightsRequest<'a>> {
@@ -99,6 +99,19 @@ impl AdapterRegistry {
     ) -> Option<Arc<dyn ControllerAdapter>> {
         self.adapters.get(driver_id).cloned()
     }
+}
+
+fn offered_once(found: Vec<DiscoveredController>) -> Vec<DiscoveredController> {
+    let mut offered: Vec<DiscoveredController> = Vec::new();
+    for controller in found {
+        let seen = offered
+            .iter()
+            .any(|earlier| earlier.config.options == controller.config.options);
+        if !seen {
+            offered.push(controller);
+        }
+    }
+    offered
 }
 
 #[cfg(test)]

@@ -122,3 +122,58 @@ fn approval_stores_the_selections_policy_options_and_the_ledgers_resolved_paths(
         assert!(assignment.grants.is_empty());
     }
 }
+
+#[test]
+fn a_listed_file_needs_no_answer_and_an_answer_that_does_not_fit_is_refused() {
+    use crate::plugin::deployment::{decision_key, ModificationPurpose, UserModification};
+
+    let _locale = crate::gui::common::harness::locale("en");
+    let listed_for = |path: &str, purpose| UserModification {
+        destination: path.into(),
+        purpose,
+        last_deployed_sha256: "c".repeat(64),
+        current_sha256: Some("d".repeat(64)),
+    };
+    let replace = listed_for(r"C:\Games\hook.dll", ModificationPurpose::ReplaceWithPlugin);
+    let restore = listed_for(
+        r"C:\Games\retired.dll",
+        ModificationPurpose::RestoreOriginal,
+    );
+    let listed = [replace.clone(), restore.clone()];
+    let answer = |modification: &UserModification, decision| {
+        BTreeMap::from([(decision_key(&modification.destination), decision)])
+    };
+
+    assert_eq!(
+        validate_modification_approval(&listed, &BTreeMap::new()),
+        Ok(())
+    );
+
+    for (modification, decision) in [
+        (&replace, ModificationDecision::KeepCurrent),
+        (&replace, ModificationDecision::BackupAndOverwrite),
+        (&restore, ModificationDecision::KeepCurrent),
+        (&restore, ModificationDecision::RestoreOriginal),
+    ] {
+        assert_eq!(
+            validate_modification_approval(&listed, &answer(modification, decision)),
+            Ok(()),
+            "{decision:?} for {}",
+            modification.destination.display()
+        );
+    }
+
+    for (modification, decision) in [
+        (&replace, ModificationDecision::RestoreOriginal),
+        (&restore, ModificationDecision::BackupAndOverwrite),
+    ] {
+        assert_eq!(
+            validate_modification_approval(&listed, &answer(modification, decision)),
+            Err(format!(
+                "approved action is invalid for {}",
+                modification.destination.display()
+            )),
+            "{decision:?}"
+        );
+    }
+}

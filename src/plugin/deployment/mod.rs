@@ -2,6 +2,7 @@ mod backup;
 mod change;
 mod deploy;
 mod execution;
+mod holding;
 mod identity;
 mod model;
 mod planning;

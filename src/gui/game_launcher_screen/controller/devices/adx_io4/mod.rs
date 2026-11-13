@@ -5,13 +5,11 @@ use super::super::framework::descriptor::{
 };
 use super::super::framework::lights::TURN_OFF_ON_GAME_CLOSE;
 use super::super::transport::hid::HidAdapter;
+use super::io4_report::{Io4ReportDecoder, PID, REPORT_SIZE, VID};
 use super::led_board;
 use super::ring_bindings::RING_BINDINGS;
-use report::{AdxIo4Decoder, DEFAULT_PID, DEFAULT_VID, REPORT_SIZE};
 
-mod report;
-
-const IDENTITIES: &[(u16, u16)] = &[(DEFAULT_VID, DEFAULT_PID)];
+const IDENTITIES: &[(u16, u16)] = &[(VID, PID)];
 const OPTIONS: &[ControllerOptionDescriptor] = &[
     ControllerOptionDescriptor {
         key: "vid",
@@ -38,16 +36,17 @@ pub(super) static DESCRIPTOR: ControllerDriverDescriptor = ControllerDriverDescr
 };
 
 pub(in crate::gui::game_launcher_screen::controller) fn adapter() -> HidAdapter {
-    HidAdapter::new(&DESCRIPTOR, IDENTITIES, REPORT_SIZE, Arc::new(decoder()))
+    HidAdapter::new(
+        &DESCRIPTOR,
+        IDENTITIES,
+        REPORT_SIZE,
+        Arc::new(Io4ReportDecoder),
+    )
 }
 
 #[cfg(test)]
 pub(in crate::gui::game_launcher_screen::controller) fn identity() -> (u16, u16, usize) {
-    (DEFAULT_VID, DEFAULT_PID, REPORT_SIZE)
-}
-
-pub(in crate::gui::game_launcher_screen::controller) fn decoder() -> AdxIo4Decoder {
-    AdxIo4Decoder
+    (VID, PID, REPORT_SIZE)
 }
 
 #[cfg(test)]
