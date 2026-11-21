@@ -4,4 +4,5 @@ pub mod package;
 pub mod startup;
 pub mod storage;
 pub mod store_apps;
+pub mod taskbar;
 pub mod tray;

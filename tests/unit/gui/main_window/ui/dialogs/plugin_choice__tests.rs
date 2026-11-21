@@ -25,6 +25,7 @@ fn assignment(sha256: &str) -> PluginAssignment {
         resolved_watch_target: None,
         grants: Vec::new(),
         ledger_reference: std::path::PathBuf::from("C:/state/ledger.toml"),
+        files_unknown: false,
     }
 }
 
@@ -105,4 +106,25 @@ fn without_a_selected_plugin_there_is_no_panel_and_no_selection() {
         assert!(unchosen.selected_with_options().is_none(), "{selected:?}");
         assert!(unchosen.selection().is_none(), "{selected:?}");
     }
+}
+
+#[test]
+fn an_unknown_patch_selects_no_version_until_one_is_picked() {
+    let plugins = || vec![plugin_descriptor()];
+    let mut unknown = assignment(&"F".repeat(64));
+    unknown.files_unknown = true;
+    let mut choice = PluginChoice::for_assignment(plugins(), Some(&unknown));
+    assert!(choice.unknown);
+
+    assert_eq!(state(&choice), (None, false, true, true, false));
+    assert!(choice.selection().is_none());
+    choice.selected = Some(0);
+    let selection = choice.selection().expect("a picked version is applied");
+    assert!(selection
+        .sha256
+        .eq_ignore_ascii_case(&plugin_descriptor().revision.package_sha256));
+
+    let known = assignment(&"F".repeat(64));
+    assert!(!PluginChoice::for_assignment(plugins(), Some(&known)).unknown);
+    assert!(!PluginChoice::new(plugins()).unknown);
 }

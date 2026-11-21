@@ -56,3 +56,56 @@ fn review_cancels_with_the_plans_own_event_and_approves_only_a_complete_plan() {
         other => panic!("{other:?}"),
     }
 }
+
+fn painted(shown: &harness::Shown) -> Vec<String> {
+    crate::gui::common::harness::painted_texts(&shown.output)
+        .into_iter()
+        .map(|(text, _)| text)
+        .collect()
+}
+
+#[test]
+fn a_replaced_plugin_file_is_shown_as_backed_up_and_replaced_and_asks_nothing() {
+    use crate::plugin::deployment::{ModificationPurpose, UserModification};
+    let _locale = crate::gui::common::harness::locale("en");
+    let mut plan = preview(false);
+    plan.action = WorkflowAction::Update;
+    plan.modifications = vec![UserModification {
+        destination: r"C:\Games\plugin.dll".into(),
+        purpose: ModificationPurpose::ReplaceWithPlugin,
+        last_deployed_sha256: "c".repeat(64),
+        current_sha256: Some("d".repeat(64)),
+    }];
+    let mut shown = harness::show(Dialog::PluginAction(PluginActionDraft::new(plan.clone())));
+    let texts = painted(&shown);
+    for expected in [
+        "These plugin files are not the ones GameToaster last deployed. Each one is backed up, then replaced with the file of the version you selected.",
+        "A dated backup is taken, then it is replaced",
+    ] {
+        assert!(texts.iter().any(|text| text == expected), "{expected:?} in {texts:#?}");
+    }
+    assert!(
+        !texts
+            .iter()
+            .any(|text| text == "Keep my file (leave it unmodified)"),
+        "{texts:#?}"
+    );
+    match shown.click_action(1) {
+        DialogEvent::ConfirmPluginAction { token, approval } => {
+            assert_eq!(token, TOKEN);
+            assert!(approval.modification_decisions.is_empty());
+        }
+        other => panic!("{other:?}"),
+    }
+
+    plan.modifications[0].purpose = ModificationPurpose::RestoreOriginal;
+    let mut shown = harness::show(Dialog::PluginAction(PluginActionDraft::new(plan)));
+    let texts = painted(&shown);
+    assert!(
+        texts
+            .iter()
+            .any(|text| text == "Keep my file (leave it unmodified)"),
+        "{texts:#?}"
+    );
+    assert!(matches!(shown.click_action(1), DialogEvent::None));
+}

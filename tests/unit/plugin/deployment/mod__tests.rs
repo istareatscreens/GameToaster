@@ -341,54 +341,44 @@ fn deployed_fixture() -> (Fixture, String) {
 }
 
 #[test]
-fn a_changed_file_is_kept_when_no_answer_is_given_and_stays_the_operators() {
+fn a_changed_file_is_backed_up_and_replaced_when_no_answer_is_given() {
     let (fixture, assignment) = deployed_fixture();
     let destination = fixture.game.join("plugin.bin");
     let deployed_hash = sha256_file(&destination).unwrap();
-    let backups = backups_of(&destination);
-    assert_eq!(backups.len(), 1, "the first-install original");
+    assert_eq!(
+        backups_of(&destination).len(),
+        1,
+        "the first-install original"
+    );
     fs::write(&destination, b"user-edit").unwrap();
+    let edited_hash = sha256_file(&destination).unwrap();
 
-    for pass in 0..3 {
-        let plan = plan_as_revision(&fixture, 'a');
-        let ledger = fixture
-            .engine
-            .deploy(
-                &assignment,
-                "1.0.0",
-                &plan,
-                &BTreeMap::new(),
-                FailureInjection::default(),
-            )
-            .unwrap_or_else(|error| panic!("deployment pass {pass} was refused: {error}"));
-        assert_eq!(
-            fs::read(&destination).unwrap(),
-            b"user-edit",
-            "deployment pass {pass} wrote over the operator's file"
-        );
-        assert_eq!(
-            backups_of(&destination),
-            backups,
-            "deployment pass {pass} backed the kept file up"
-        );
-        let journal = &ledger.transactions.last().unwrap().files[0];
-        assert_eq!(
-            (journal.action, journal.state),
-            (
-                TransactionFileAction::KeepCurrent,
-                FileCommitState::KeptByUser
-            ),
-            "pass {pass}"
-        );
-        assert_eq!(
-            ledger.kept_by_operator(),
-            std::slice::from_ref(&destination)
-        );
+    let ledger = fixture
+        .engine
+        .deploy(
+            &assignment,
+            "1.0.0",
+            &plan_as_revision(&fixture, 'a'),
+            &BTreeMap::new(),
+            FailureInjection::default(),
+        )
+        .expect("a deployment with no answer is not refused");
+    assert_eq!(fs::read(&destination).unwrap(), b"plugin-v1");
+    let journal = &ledger.transactions.last().unwrap().files[0];
+    assert_eq!(
+        (journal.action, journal.state),
+        (TransactionFileAction::Write, FileCommitState::Committed)
+    );
+    assert!(ledger.kept_by_operator().is_empty());
+    assert!(!ledger.files[0].user_kept_current);
+    assert_eq!(ledger.files[0].last_deployed_sha256, deployed_hash);
 
-        assert!(ledger.files[0].user_kept_current);
-        assert_eq!(ledger.files[0].last_deployed_sha256, deployed_hash);
-        assert_eq!(ledger.files[0].backup_chain.len(), 1);
-    }
+    assert_eq!(ledger.files[0].backup_chain.len(), 2);
+    let last = ledger.files[0].backup_chain.last().unwrap();
+    assert_eq!(last.sha256, edited_hash);
+    assert_eq!(last.reason, "update");
+    assert_eq!(fs::read(&last.path).unwrap(), b"user-edit");
+    assert_eq!(backups_of(&destination).len(), 2);
 }
 
 #[test]
@@ -438,32 +428,19 @@ fn an_answer_to_replace_backs_the_changed_file_up_and_writes_the_plugins_own() {
 }
 
 #[test]
-fn a_file_the_operator_chose_to_keep_is_left_alone_by_later_deployments() {
+fn an_answer_to_keep_leaves_the_file_and_a_deployment_without_one_replaces_it() {
     let (fixture, assignment) = deployed_fixture();
     let destination = fixture.game.join("plugin.bin");
     fs::write(&destination, b"user-edit").unwrap();
 
-    fixture
-        .engine
-        .deploy(
-            &assignment,
-            "1.0.0",
-            &plan_as_revision(&fixture, 'a'),
-            &decision(&destination, ModificationDecision::KeepCurrent),
-            FailureInjection::default(),
-        )
-        .unwrap();
-    assert_eq!(fs::read(&destination).unwrap(), b"user-edit");
-
-    let mut kept = fixture.engine.store().load(1, &assignment).unwrap();
     for pass in 0..2 {
-        kept = fixture
+        let kept = fixture
             .engine
             .deploy(
                 &assignment,
                 "1.0.0",
                 &plan_as_revision(&fixture, 'a'),
-                &BTreeMap::new(),
+                &decision(&destination, ModificationDecision::KeepCurrent),
                 FailureInjection::default(),
             )
             .unwrap();
@@ -472,8 +449,10 @@ fn a_file_the_operator_chose_to_keep_is_left_alone_by_later_deployments() {
             b"user-edit",
             "deployment pass {pass} wrote over the file the operator chose to keep"
         );
+        assert_eq!(kept.kept_by_operator(), std::slice::from_ref(&destination));
     }
 
+    let kept = fixture.engine.store().load(1, &assignment).unwrap();
     let plan = plan_as_revision(&fixture, 'a');
     let preview = fixture
         .engine
@@ -481,17 +460,20 @@ fn a_file_the_operator_chose_to_keep_is_left_alone_by_later_deployments() {
         .unwrap();
     assert_eq!(preview.len(), 1);
     assert_eq!(preview[0].purpose, ModificationPurpose::ReplaceWithPlugin);
-    fixture
+    let replaced = fixture
         .engine
         .deploy(
             &assignment,
             "1.0.0",
             &plan,
-            &decision(&destination, ModificationDecision::BackupAndOverwrite),
+            &BTreeMap::new(),
             FailureInjection::default(),
         )
         .unwrap();
     assert_eq!(fs::read(&destination).unwrap(), b"plugin-v1");
+    assert!(replaced.kept_by_operator().is_empty());
+    let last = replaced.files[0].backup_chain.last().unwrap();
+    assert_eq!(fs::read(&last.path).unwrap(), b"user-edit");
 }
 
 #[test]
@@ -507,7 +489,7 @@ fn a_kept_file_is_the_assignments_again_once_it_holds_the_plugins_own_bytes() {
             &assignment,
             "2.0.0",
             &plan_as_revision(&fixture, 'b'),
-            &BTreeMap::new(),
+            &decision(&destination, ModificationDecision::KeepCurrent),
             FailureInjection::default(),
         )
         .unwrap();
@@ -542,7 +524,7 @@ fn a_kept_file_is_the_assignments_again_once_it_holds_the_plugins_own_bytes() {
 }
 
 #[test]
-fn an_older_file_of_the_plugins_put_there_by_the_operator_is_kept() {
+fn an_older_file_of_the_plugins_is_replaced_by_the_selected_version_and_backed_up() {
     let (fixture, assignment) = deployed_fixture();
     let destination = fixture.game.join("plugin.bin");
     fs::write(fixture.package.join("plugin.bin"), b"plugin-v2").unwrap();
@@ -572,14 +554,21 @@ fn an_older_file_of_the_plugins_put_there_by_the_operator_is_kept() {
             .unwrap();
         assert_eq!(
             fs::read(&destination).unwrap(),
-            b"plugin-v1",
-            "deployment pass {pass} wrote over the file the operator put there"
+            b"plugin-v2",
+            "deployment pass {pass} left the older file in place"
         );
+        assert!(ledger.kept_by_operator().is_empty(), "pass {pass}");
         assert_eq!(
-            ledger.kept_by_operator(),
-            std::slice::from_ref(&destination)
+            ledger.files[0].last_deployed_sha256,
+            sha256_file(&destination).unwrap(),
+            "pass {pass}: the record names what is on disk"
         );
     }
+    let ledger = fixture.engine.store().load(1, &assignment).unwrap();
+    assert!(ledger.files[0]
+        .backup_chain
+        .iter()
+        .any(|backup| fs::read(&backup.path).unwrap() == b"plugin-v1"));
 }
 
 #[test]
@@ -597,7 +586,7 @@ fn a_missing_managed_file_is_written_back_without_an_answer() {
                     &assignment,
                     "1.0.0",
                     &plan_as_revision(&fixture, 'a'),
-                    &BTreeMap::new(),
+                    &decision(&destination, ModificationDecision::KeepCurrent),
                     FailureInjection::default(),
                 )
                 .unwrap();
@@ -647,7 +636,7 @@ fn a_changed_file_that_already_holds_the_plans_bytes_is_the_assignments_again() 
             &assignment,
             "1.0.0",
             &plan_as_revision(&fixture, 'a'),
-            &BTreeMap::new(),
+            &decision(&destination, ModificationDecision::KeepCurrent),
             FailureInjection::default(),
         )
         .unwrap();
@@ -699,7 +688,7 @@ fn a_changed_file_that_already_holds_the_plans_bytes_is_the_assignments_again() 
 }
 
 #[test]
-fn an_update_writes_the_other_files_and_keeps_the_changed_one() {
+fn an_update_writes_the_other_files_and_keeps_the_one_it_is_asked_to() {
     let mut fixture = multi_file_fixture();
     let assignment = fixture.engine.new_assignment_id().unwrap();
     fixture
@@ -738,7 +727,7 @@ fn an_update_writes_the_other_files_and_keeps_the_changed_one() {
             &assignment,
             "2.0.0",
             &plan,
-            &BTreeMap::new(),
+            &decision(&changed, ModificationDecision::KeepCurrent),
             FailureInjection::default(),
         )
         .unwrap();
@@ -775,6 +764,58 @@ fn an_update_writes_the_other_files_and_keeps_the_changed_one() {
         .iter()
         .filter(|file| !paths_equal(&file.destination, &changed))
         .all(|file| !file.user_kept_current));
+}
+
+#[test]
+fn an_update_without_an_answer_writes_every_file_and_backs_up_the_changed_one() {
+    let mut fixture = multi_file_fixture();
+    let assignment = fixture.engine.new_assignment_id().unwrap();
+    fixture
+        .engine
+        .deploy(
+            &assignment,
+            "1.0.0",
+            &fixture.plan,
+            &BTreeMap::new(),
+            FailureInjection::default(),
+        )
+        .unwrap();
+    let changed = fixture.game.join("managed-2.bin");
+    fs::write(&changed, b"user-edit").unwrap();
+    for index in 1..=3 {
+        fs::write(
+            fixture.package.join(format!("managed-{index}.bin")),
+            format!("plugin-{index}-v2").as_bytes(),
+        )
+        .unwrap();
+    }
+    fixture.manifest.plugin_version = Version::parse("2.0.0").unwrap();
+    let plan = plan_as_revision(&fixture, 'b');
+    let updated = fixture
+        .engine
+        .deploy(
+            &assignment,
+            "2.0.0",
+            &plan,
+            &BTreeMap::new(),
+            FailureInjection::default(),
+        )
+        .unwrap();
+    for index in 1..=3 {
+        assert_eq!(
+            fs::read(fixture.game.join(format!("managed-{index}.bin"))).unwrap(),
+            format!("plugin-{index}-v2").as_bytes()
+        );
+    }
+    assert!(updated.kept_by_operator().is_empty());
+    assert_eq!(updated.plugin_version, "2.0.0");
+    let record = updated
+        .files
+        .iter()
+        .find(|file| paths_equal(&file.destination, &changed))
+        .unwrap();
+    let last = record.backup_chain.last().unwrap();
+    assert_eq!(fs::read(&last.path).unwrap(), b"user-edit");
 }
 
 #[test]

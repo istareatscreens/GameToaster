@@ -47,6 +47,7 @@ fn plugin_watch_keeps_the_exact_selected_executable_path() {
         resolved_watch_target: Some(game.selected_target.clone()),
         grants: Vec::new(),
         ledger_reference: PathBuf::from(r"C:\state\ledger.toml"),
+        files_unknown: false,
     });
 
     assert_eq!(game.watch_target().as_deref(), Some("selected.exe"));
@@ -186,6 +187,7 @@ fn the_automatic_watch_name_yields_to_a_plugins_target_and_an_operators_name_doe
         resolved_watch_target: Some(target.to_path_buf()),
         grants: Vec::new(),
         ledger_reference: PathBuf::from(r"C:\state\ledger.toml"),
+        files_unknown: false,
     };
 
     game.watch_exe = Some(" GAME.exe ".into());
@@ -253,6 +255,7 @@ fn a_plugin_target_that_is_a_script_is_never_the_watch_target() {
         resolved_watch_target: Some(game.selected_target.clone()),
         grants: Vec::new(),
         ledger_reference: PathBuf::from(r"C:\state\ledger.toml"),
+        files_unknown: false,
     });
     assert_eq!(game.watch_target(), None);
     assert_eq!(game.watch_target_path(), None);

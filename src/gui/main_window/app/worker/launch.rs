@@ -446,6 +446,7 @@ pub(super) fn apply_reconciliation(
     assignment.resolved_launcher = result.ledger.resolved_launcher.clone();
     assignment.resolved_watch_target = result.ledger.resolved_watch_target.clone();
     assignment.ledger_reference = result.ledger_reference.clone();
+    assignment.files_unknown = result.files_unknown;
     game.config_targets = result.config_targets.clone();
     Ok(*assignment != previous_assignment || game.config_targets != previous_config_targets)
 }

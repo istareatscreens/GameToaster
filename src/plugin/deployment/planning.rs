@@ -61,7 +61,7 @@ impl DeploymentEngine {
                     ));
                 }
 
-                None => ledger.keeps_instead_of_writing(planned, current_hash.as_deref()),
+                None => false,
             };
             files.push(model::TransactionFile {
                 action: if keep {

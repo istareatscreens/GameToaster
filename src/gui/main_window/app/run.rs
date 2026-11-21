@@ -39,6 +39,32 @@ pub fn run(
 
     let main_visible_on_start =
         main_window_starts_visible(start_in_tray, &initial_config, config_notice.is_some());
+    log.event(
+        "main-window-start",
+        &[
+            (
+                "install",
+                match crate::launcher_gui::platform::package::InstallKind::current() {
+                    Ok(crate::launcher_gui::platform::package::InstallKind::Portable) => {
+                        "portable".into()
+                    }
+                    Ok(crate::launcher_gui::platform::package::InstallKind::Packaged) => {
+                        "packaged".into()
+                    }
+                    Err(_) => "unknown".into(),
+                },
+            ),
+            ("system_start", start_in_tray.to_string()),
+            (
+                "main_window",
+                if main_visible_on_start {
+                    "shown".into()
+                } else {
+                    "hidden".into()
+                },
+            ),
+        ],
+    );
     let (rgba, width, height) = crate::launcher_gui::assets::icon_rgba(&launcher_dir, 256)?;
     let viewport_icon = egui::IconData {
         rgba,
@@ -47,7 +73,7 @@ pub fn run(
     };
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,
-        viewport: main_viewport(main_visible_on_start, viewport_icon),
+        viewport: main_viewport(main_visible_on_start, start_in_tray, viewport_icon),
         ..Default::default()
     };
     eframe::run_native(
@@ -68,8 +94,8 @@ pub fn run(
     .map_err(|error| crate::launcher_gui::startup_failure::gui_failure_message(&error.to_string()))
 }
 
-fn main_viewport(visible: bool, icon: egui::IconData) -> egui::ViewportBuilder {
-    egui::ViewportBuilder::default()
+fn main_viewport(visible: bool, system_start: bool, icon: egui::IconData) -> egui::ViewportBuilder {
+    let builder = egui::ViewportBuilder::default()
         .with_title(crate::gui::main_window::services::config_placement::MAIN_WINDOW_TITLE)
         .with_app_id("gametoaster-launcher")
         .with_inner_size([1080.0, 800.0])
@@ -79,15 +105,22 @@ fn main_viewport(visible: bool, icon: egui::IconData) -> egui::ViewportBuilder {
         .with_resizable(false)
         .with_taskbar(true)
         .with_visible(visible)
-        .with_icon(icon)
+        .with_icon(icon);
+    if system_start && !visible {
+        builder.with_position(SYSTEM_START_POSITION)
+    } else {
+        builder
+    }
 }
+
+const SYSTEM_START_POSITION: egui::Pos2 = egui::pos2(-32000.0, -32000.0);
 
 fn main_window_starts_visible(
     start_in_tray: bool,
     config: &LauncherConfig,
     notice_pending: bool,
 ) -> bool {
-    notice_pending || (!start_in_tray && !config.settings.controller_screen.starts_main_hidden())
+    !start_in_tray && (notice_pending || !config.settings.controller_screen.starts_main_hidden())
 }
 
 #[cfg(test)]

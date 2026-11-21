@@ -193,3 +193,66 @@ fn the_inspection_shows_each_file_s_first_original_and_the_transaction_count() {
         "{texts:#?}"
     );
 }
+
+#[test]
+fn a_game_whose_patch_is_unknown_shows_unknown_until_a_version_is_picked() {
+    use crate::launcher_gui::model::{PluginAssignment, PluginRevision, PluginUpdatePolicy};
+    let _locale = crate::gui::common::harness::locale("en");
+    let plugins = vec![super::super::harness::plugin_descriptor()];
+    let descriptor = &plugins[0];
+    let assignment = PluginAssignment {
+        plugin_id: descriptor.revision.plugin_id.clone(),
+        revision: PluginRevision {
+            version: descriptor.revision.plugin_version.clone(),
+            sha256: descriptor.revision.package_sha256.clone(),
+        },
+        update_policy: PluginUpdatePolicy::Pinned,
+        allow_prerelease: false,
+        copy_zero_matches_to_game_folder: false,
+        search_directory_destinations: false,
+        assignment_id: "0123456789abcdef0123456789abcdef".into(),
+        resolved_launcher: None,
+        resolved_watch_target: None,
+        grants: Vec::new(),
+        ledger_reference: PathBuf::from("C:/state/ledger.toml"),
+        files_unknown: true,
+    };
+    let mut unknown = draft(None, None);
+    unknown.plugin_choice = PluginChoice::for_assignment(plugins.clone(), Some(&assignment));
+    unknown.plugin = Some(assignment.clone());
+    let shown = harness::show(Dialog::GameSettings(unknown));
+    let shown_unknown = texts(&shown);
+    let installed = format!("Installed: {} · version unknown", assignment.plugin_id);
+    for expected in [
+        "Unknown",
+        installed.as_str(),
+        "The plugin files in the game folder match no version added to GameToaster, so they are left as they are and the game runs with them. Pick a version and apply it to replace them.",
+    ] {
+        assert!(shown_unknown.iter().any(|text| text == expected), "{expected:?} in {shown_unknown:#?}");
+    }
+    assert!(
+        !shown_unknown
+            .iter()
+            .any(|text| text == "Review plugin change"),
+        "nothing is applied before a pick: {shown_unknown:#?}"
+    );
+
+    let known = PluginAssignment {
+        files_unknown: false,
+        ..assignment
+    };
+    let mut current = draft(None, None);
+    current.plugin_choice = PluginChoice::for_assignment(plugins, Some(&known));
+    current.plugin = Some(known);
+    let shown_known = texts(&harness::show(Dialog::GameSettings(current)));
+    assert!(
+        !shown_known.iter().any(|text| text == "Unknown"),
+        "{shown_known:#?}"
+    );
+    assert!(
+        !shown_known
+            .iter()
+            .any(|text| text.contains("version unknown")),
+        "{shown_known:#?}"
+    );
+}

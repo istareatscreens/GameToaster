@@ -38,6 +38,7 @@ fn an_assigned_revision_cannot_be_removed_and_an_unassigned_one_goes_to_recovery
         resolved_watch_target: None,
         grants: Vec::new(),
         ledger_reference: std::path::PathBuf::from("C:/state/ledger.toml"),
+        files_unknown: false,
     });
     let mut shown = harness::show(Dialog::PluginLibrary(PluginLibraryDraft::new(
         vec![plugin.clone()],

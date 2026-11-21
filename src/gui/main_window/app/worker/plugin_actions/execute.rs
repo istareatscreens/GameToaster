@@ -313,6 +313,7 @@ pub(super) fn apply_new_assignment(
             .deployment
             .store()
             .ledger_path(game.id.0, &assignment_id)?,
+        files_unknown: false,
     });
     Ok(())
 }

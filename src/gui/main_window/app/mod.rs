@@ -66,6 +66,10 @@ struct LauncherApp {
     controller_running_game: Option<crate::launcher_gui::model::GameId>,
     main_visible: bool,
 
+    system_start_hide_frames: u32,
+
+    system_start_window: Option<std::num::NonZeroIsize>,
+
     started_in_tray: bool,
     closing: bool,
     allow_close: bool,
@@ -76,6 +80,8 @@ struct LauncherApp {
     plugins: Vec<crate::plugin::catalog::library::PluginDescriptor>,
     log: LauncherLog,
 }
+
+const SYSTEM_START_HIDE_FRAMES: u32 = 8;
 
 impl LauncherApp {
     fn new(
@@ -152,6 +158,12 @@ impl LauncherApp {
             launch_handoff: None,
             controller_running_game: None,
             main_visible,
+            system_start_hide_frames: if start_in_tray && !main_visible {
+                SYSTEM_START_HIDE_FRAMES
+            } else {
+                0
+            },
+            system_start_window: None,
             started_in_tray: start_in_tray,
             closing: false,
             allow_close: false,

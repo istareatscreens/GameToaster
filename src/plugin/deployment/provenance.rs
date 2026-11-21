@@ -152,16 +152,19 @@ fn record_kept(ledger: &mut AssignmentLedger, planned: &PlannedFile) -> Result<(
         Some(existing) => follow_plan(existing, planned, true),
         None => {
             let current = sha256_file(&planned.destination)?;
+            let last_deployed_sha256 = if is_operator_owned(planned.kind) {
+                current.clone()
+            } else {
+                planned.source_sha256.clone()
+            };
             ledger.files.push(model::FileProvenance {
                 kind: planned.kind,
                 source_relative: planned.source_relative.clone(),
                 source: planned.source.clone(),
                 destination: planned.destination.clone(),
-                first_install_original: FirstInstallOriginal::Preserved {
-                    sha256: current.clone(),
-                },
+                first_install_original: FirstInstallOriginal::Preserved { sha256: current },
                 backup_chain: Vec::new(),
-                last_deployed_sha256: current,
+                last_deployed_sha256,
                 add_to_config_menu: planned.add_to_config_menu,
                 user_kept_current: true,
             });

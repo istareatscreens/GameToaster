@@ -38,9 +38,9 @@ fn a_disabled_controller_screen_never_hides_the_main_window() {
 }
 
 #[test]
-fn a_pending_notice_opens_the_main_window_however_the_launcher_starts() {
+fn a_pending_notice_opens_the_main_window_at_a_start_by_the_operator_only() {
     assert!(main_window_starts_visible(
-        true,
+        false,
         &config(false, false, false),
         true
     ));
@@ -49,11 +49,38 @@ fn a_pending_notice_opens_the_main_window_however_the_launcher_starts() {
         &config(true, true, true),
         true
     ));
-    assert!(main_window_starts_visible(
+
+    assert!(!main_window_starts_visible(
+        true,
+        &config(false, false, false),
+        true
+    ));
+    assert!(!main_window_starts_visible(
         true,
         &config(true, true, true),
         true
     ));
+}
+
+#[test]
+fn a_system_start_never_shows_the_main_window() {
+    for enabled in [false, true] {
+        for launch_on_start in [false, true] {
+            for controller_only_start in [false, true] {
+                for notice in [false, true] {
+                    assert!(
+                        !main_window_starts_visible(
+                            true,
+                            &config(enabled, launch_on_start, controller_only_start),
+                            notice
+                        ),
+                        "enabled={enabled} launch_on_start={launch_on_start} \
+                         controller_only_start={controller_only_start} notice={notice}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -63,7 +90,7 @@ fn the_main_window_has_a_taskbar_button_and_keeps_its_fixed_frameless_shape() {
         width: 1,
         height: 1,
     };
-    let viewport = main_viewport(true, icon.clone());
+    let viewport = main_viewport(true, false, icon.clone());
     assert_eq!(viewport.taskbar, Some(true));
     assert_eq!(viewport.visible, Some(true));
     assert_eq!(viewport.title.as_deref(), Some("GameToaster"));
@@ -74,8 +101,19 @@ fn the_main_window_has_a_taskbar_button_and_keeps_its_fixed_frameless_shape() {
     assert_eq!(viewport.decorations, Some(false));
     assert_eq!(viewport.resizable, Some(false));
     assert!(viewport.icon.is_some());
+    assert_eq!(
+        viewport.position, None,
+        "a start by the operator is placed as before"
+    );
 
-    let hidden = main_viewport(false, icon);
+    let hidden = main_viewport(false, false, icon.clone());
     assert_eq!(hidden.visible, Some(false));
     assert_eq!(hidden.taskbar, Some(true));
+    assert_eq!(hidden.position, None);
+
+    let system = main_viewport(false, true, icon);
+    assert_eq!(system.visible, Some(false));
+    assert_eq!(system.taskbar, Some(true));
+    assert_eq!(system.position, Some(SYSTEM_START_POSITION));
+    assert!(SYSTEM_START_POSITION.x <= -30000.0 && SYSTEM_START_POSITION.y <= -30000.0);
 }

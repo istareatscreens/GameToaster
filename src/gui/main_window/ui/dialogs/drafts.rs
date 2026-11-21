@@ -178,10 +178,19 @@ impl PluginActionDraft {
                     .any(|candidate| paths_equal(candidate, selected))
             })
         });
-        let modifications_complete = self.preview.modifications.iter().all(|modification| {
-            let key = crate::plugin::deployment::decision_key(&modification.destination);
-            self.approval.modification_decisions.contains_key(&key)
-        });
+
+        let modifications_complete = self
+            .preview
+            .modifications
+            .iter()
+            .filter(|modification| {
+                modification.purpose
+                    != crate::plugin::deployment::ModificationPurpose::ReplaceWithPlugin
+            })
+            .all(|modification| {
+                let key = crate::plugin::deployment::decision_key(&modification.destination);
+                self.approval.modification_decisions.contains_key(&key)
+            });
         grants_complete && selections_complete && modifications_complete
     }
 

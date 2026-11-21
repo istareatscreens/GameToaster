@@ -38,6 +38,8 @@ pub struct ReconcileResult {
     pub changed: bool,
 
     pub kept_files: Vec<PathBuf>,
+
+    pub files_unknown: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

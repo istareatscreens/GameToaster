@@ -20,6 +20,7 @@ fn game_and_assignment() -> (GameEntry, PluginAssignment) {
         resolved_watch_target: None,
         grants: Vec::new(),
         ledger_reference: PathBuf::from(r"C:\state\ledger.toml"),
+        files_unknown: false,
     };
     let game = GameEntry {
         id: GameId(7),

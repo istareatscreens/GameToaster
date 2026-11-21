@@ -8,7 +8,7 @@ pub(super) enum StartupScreenAction {
 
     ArmMonitorReturn,
 
-    RevealMonitorMissing,
+    ReportMonitorMissing,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,7 +44,7 @@ pub(super) fn decide(
         if inputs.monitor_return_configured {
             return StartupScreenAction::ArmMonitorReturn;
         }
-        return StartupScreenAction::RevealMonitorMissing;
+        return StartupScreenAction::ReportMonitorMissing;
     }
     if inputs.launch_on_start {
         return StartupScreenAction::OpenForUser {

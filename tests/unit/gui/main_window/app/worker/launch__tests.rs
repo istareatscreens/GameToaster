@@ -27,6 +27,7 @@ fn game(policy: PluginUpdatePolicy, allow_prerelease: bool) -> GameEntry {
             resolved_watch_target: None,
             grants: Vec::new(),
             ledger_reference: PathBuf::from(r"C:\state\ledger.toml"),
+            files_unknown: false,
         }),
         hotkey: None,
         watch_exe: None,
@@ -201,6 +202,7 @@ mod scripts {
             resolved_watch_target: None,
             grants: Vec::new(),
             ledger_reference: harness.absent("ledger.toml"),
+            files_unknown: false,
         });
         entry.pre_start_script = Some(harness.script("start.bat", "pre", &[], 0));
         entry.close_script = Some(harness.script("stop.bat", "close", &[], 0));
@@ -402,13 +404,22 @@ mod operator_files {
     use crate::plugin::manifest::{CopyType, Manifest, PluginFile};
 
     fn import_plugin(harness: &Harness) -> CatalogRevision {
-        let package = harness.absent("package");
+        import_version(harness, "package", "1.0.0", b"plugin")
+    }
+
+    fn import_version(
+        harness: &Harness,
+        folder: &str,
+        version: &str,
+        payload: &[u8],
+    ) -> CatalogRevision {
+        let package = harness.absent(folder);
         fs::create_dir_all(&package).unwrap();
-        fs::write(package.join("payload.bin"), b"plugin").unwrap();
+        fs::write(package.join("payload.bin"), payload).unwrap();
         let manifest = Manifest {
             manifest_version: 1,
             plugin_id: "org.example.operatorfiles".into(),
-            plugin_version: semver::Version::parse("1.0.0").unwrap(),
+            plugin_version: semver::Version::parse(version).unwrap(),
             label: "Operator files".into(),
             description: "A plugin with one file in the game folder".into(),
             is_patcher: false,
@@ -440,6 +451,64 @@ mod operator_files {
     }
 
     #[test]
+    fn a_launch_applies_the_selected_version_and_records_an_unknown_patch() {
+        let mut harness = Harness::new();
+        let older = import_version(&harness, "package-older", "0.9.0", b"older");
+        let selected = import_plugin(&harness);
+        assert!(older.plugin_version < selected.plugin_version);
+        let mut entry = game(&harness.script("game.bat", "game", &[], 0));
+        entry.plugin = Some(PluginAssignment {
+            plugin_id: selected.plugin_id.clone(),
+            revision: PluginRevision {
+                version: selected.plugin_version.clone(),
+                sha256: selected.package_sha256.clone(),
+            },
+            update_policy: PluginUpdatePolicy::Pinned,
+            allow_prerelease: false,
+            copy_zero_matches_to_game_folder: false,
+            search_directory_destinations: false,
+            assignment_id: "0123456789abcdef0123456789abcdef".into(),
+            resolved_launcher: None,
+            resolved_watch_target: None,
+            grants: Vec::new(),
+            ledger_reference: harness.absent("ledger.toml"),
+            files_unknown: false,
+        });
+        let payload = entry.selected_target.with_file_name("payload.bin");
+        let launch = |harness: &mut Harness, entry: &crate::launcher_gui::model::GameEntry| {
+            let launched = harness.context.launch(
+                entry.clone(),
+                config(entry),
+                LaunchCancel::new(),
+                released_handoff(),
+            );
+            let WorkerResult::Launched { updated_config, .. } = launched else {
+                panic!("the launch did not start the game: {launched:?}");
+            };
+            harness.pump_until(|result| matches!(result, WorkerResult::GameExited(_)));
+            updated_config
+        };
+
+        fs::write(&payload, b"older").unwrap();
+        let first = launch(&mut harness, &entry).expect("the first launch records the assignment");
+        assert_eq!(fs::read(&payload).unwrap(), b"plugin");
+        let stored = first.games[0].clone();
+        assert!(!stored.plugin.as_ref().unwrap().files_unknown);
+
+        fs::write(&payload, b"operator-build").unwrap();
+        let second = launch(&mut harness, &stored).expect("the unknown patch is recorded");
+        assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+        let unknown = second.games[0].clone();
+        assert!(unknown.plugin.as_ref().unwrap().files_unknown);
+
+        fs::write(&payload, b"older").unwrap();
+        let third = launch(&mut harness, &unknown).expect("leaving the unknown state is recorded");
+        assert_eq!(fs::read(&payload).unwrap(), b"plugin");
+        assert!(!third.games[0].plugin.as_ref().unwrap().files_unknown);
+        assert_eq!(harness.marks(), ["game", "game", "game"]);
+    }
+
+    #[test]
     fn a_game_whose_plugin_file_the_operator_changed_starts_and_the_log_names_the_file() {
         let mut harness = Harness::new();
         let revision = import_plugin(&harness);
@@ -459,6 +528,7 @@ mod operator_files {
             resolved_watch_target: None,
             grants: Vec::new(),
             ledger_reference: harness.absent("ledger.toml"),
+            files_unknown: false,
         });
         let payload = entry.selected_target.with_file_name("payload.bin");
         harness.context.log.set_enabled(true);

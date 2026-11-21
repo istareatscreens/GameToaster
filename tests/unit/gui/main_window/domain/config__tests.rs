@@ -88,6 +88,7 @@ fn sample() -> LauncherConfig {
                 ledger_reference: PathBuf::from(
                     r"C:\state\assignments\8\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ledger.toml",
                 ),
+                files_unknown: false,
             }),
             hotkey: Some("Ctrl+Shift+F5".parse().unwrap()),
             watch_exe: Some("game.exe".into()),
@@ -395,4 +396,57 @@ fn a_close_mode_left_in_a_schema_4_file_means_nothing() {
     let game = load(&path).unwrap().games.remove(0);
     assert_eq!(game.pre_start_script, None);
     assert_eq!(game.close_script, None);
+}
+
+#[test]
+fn an_unknown_patch_is_stored_only_while_it_is_unknown() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join(FILE_NAME);
+    let mut config = sample();
+    save_atomic(&path, &config).unwrap();
+    assert!(!fs::read_to_string(&path)
+        .unwrap()
+        .contains("plugin_files_unknown"));
+    assert!(load(&path)
+        .unwrap()
+        .games
+        .iter()
+        .filter_map(|game| game.plugin.as_ref())
+        .all(|plugin| !plugin.files_unknown));
+
+    let plugin = |config: &mut LauncherConfig| {
+        config
+            .games
+            .iter_mut()
+            .find_map(|game| game.plugin.as_mut())
+            .expect("the sample assigns a plugin")
+            .files_unknown = true;
+    };
+    plugin(&mut config);
+    save_atomic(&path, &config).unwrap();
+    let saved = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        saved.matches("plugin_files_unknown=true").count(),
+        1,
+        "{saved}"
+    );
+    assert_eq!(load(&path).unwrap(), config);
+
+    fs::write(
+        &path,
+        saved.replace("plugin_files_unknown=true", "plugin_files_unknown=maybe"),
+    )
+    .unwrap();
+    let error = load(&path).unwrap_err();
+    assert!(error.contains("plugin_files_unknown"), "{error}");
+
+    for game in &mut config.games {
+        if let Some(plugin) = game.plugin.as_mut() {
+            plugin.files_unknown = false;
+        }
+    }
+    save_atomic(&path, &config).unwrap();
+    let saved = fs::read_to_string(&path).unwrap();
+    assert!(!saved.contains("plugin_files_unknown"), "{saved}");
+    assert_eq!(load(&path).unwrap(), config);
 }

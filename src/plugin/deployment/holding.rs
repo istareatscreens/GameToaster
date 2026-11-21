@@ -1,6 +1,4 @@
-use std::path::PathBuf;
-
-use super::{is_operator_owned, AssignmentLedger, AssignmentState, FileProvenance};
+use super::{AssignmentLedger, AssignmentState, FileProvenance};
 use crate::plugin::paths::PlannedFile;
 use crate::support::paths::paths_equal;
 
@@ -11,7 +9,7 @@ impl FileProvenance {
 }
 
 impl AssignmentLedger {
-    pub(crate) fn keeps_instead_of_writing(
+    pub(crate) fn holds_operator_change(
         &self,
         planned: &PlannedFile,
         current_sha256: Option<&str>,
@@ -33,10 +31,11 @@ impl AssignmentLedger {
         !(self.state == AssignmentState::Active && managed.holds_plugin_bytes(current_sha256))
     }
 
-    pub fn kept_by_operator(&self) -> Vec<PathBuf> {
+    #[cfg(test)]
+    pub fn kept_by_operator(&self) -> Vec<std::path::PathBuf> {
         self.files
             .iter()
-            .filter(|file| !is_operator_owned(file.kind) && file.user_kept_current)
+            .filter(|file| !super::is_operator_owned(file.kind) && file.user_kept_current)
             .map(|file| file.destination.clone())
             .collect()
     }

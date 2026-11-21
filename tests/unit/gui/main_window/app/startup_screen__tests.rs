@@ -76,7 +76,7 @@ fn os_autostart_with_the_display_absent_arms_the_return_when_one_is_configured()
 fn os_autostart_with_the_display_absent_reveals_the_error_when_nothing_could_reopen() {
     assert_eq!(
         decide(tray(true, false), || false),
-        StartupScreenAction::RevealMonitorMissing
+        StartupScreenAction::ReportMonitorMissing
     );
 }
 

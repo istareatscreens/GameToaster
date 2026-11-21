@@ -238,3 +238,77 @@ fn removal_is_refused_when_assigned_and_recoverable_otherwise() {
     assert!(moved.is_dir());
     assert!(!revision.root.exists());
 }
+
+#[test]
+fn the_file_hashes_of_a_plugin_are_those_of_every_version_it_holds_and_no_other_plugin() {
+    let state = tempfile::tempdir().unwrap();
+    let catalog = Catalog::open(state.path().join("plugins")).unwrap();
+    let mut hashes_of = Vec::new();
+    for (version, bytes) in [("1.0.0", &b"one"[..]), ("2.0.0", &b"two"[..])] {
+        let source = tempfile::tempdir().unwrap();
+        package(source.path(), version, bytes);
+        catalog
+            .import_manifest(&source.path().join("manifest.toml"))
+            .unwrap();
+        hashes_of.push(
+            crate::plugin::catalog::inventory::sha256_file(
+                &source.path().join("payload/config.ini"),
+            )
+            .unwrap(),
+        );
+    }
+    let hashes = catalog.plugin_file_hashes("org.example.catalog");
+    for hash in &hashes_of {
+        assert!(
+            hashes.contains(&hash.to_ascii_lowercase()),
+            "{hash} in {hashes:?}"
+        );
+    }
+    assert!(hashes.iter().all(|hash| hash.len() == 64
+        && hash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))));
+    assert!(catalog.plugin_file_hashes("org.example.other").is_empty());
+
+    let revisions = catalog.list().unwrap();
+    let first = revisions
+        .iter()
+        .find(|revision| revision.plugin_version == Version::parse("1.0.0").unwrap())
+        .unwrap();
+    let record = first.root.join("catalog.toml");
+    let mut permissions = fs::metadata(&record).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(false);
+    fs::set_permissions(&record, permissions).unwrap();
+    fs::write(&record, b"not a record").unwrap();
+    let hashes = catalog.plugin_file_hashes("org.example.catalog");
+    assert!(!hashes.contains(&hashes_of[0].to_ascii_lowercase()));
+    assert!(hashes.contains(&hashes_of[1].to_ascii_lowercase()));
+}
+
+#[test]
+fn a_record_that_names_another_plugin_is_not_counted_for_this_one() {
+    let state = tempfile::tempdir().unwrap();
+    let catalog = Catalog::open(state.path().join("plugins")).unwrap();
+    let source = tempfile::tempdir().unwrap();
+    package(source.path(), "1.0.0", b"one");
+    catalog
+        .import_manifest(&source.path().join("manifest.toml"))
+        .unwrap();
+
+    let revision = catalog.list().unwrap().remove(0);
+    let stray = state
+        .path()
+        .join("plugins")
+        .join(encode_plugin_id("org.example.other"))
+        .join("1.0.0")
+        .join("copied");
+    fs::create_dir_all(&stray).unwrap();
+    fs::copy(
+        revision.root.join("catalog.toml"),
+        stray.join("catalog.toml"),
+    )
+    .unwrap();
+    assert!(catalog.plugin_file_hashes("org.example.other").is_empty());
+    assert!(!catalog.plugin_file_hashes("org.example.catalog").is_empty());
+}

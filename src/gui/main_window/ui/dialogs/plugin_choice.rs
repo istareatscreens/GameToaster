@@ -11,6 +11,8 @@ pub struct PluginChoice {
     pub allow_prerelease: bool,
     pub copy_zero_matches_to_game_folder: bool,
     pub search_directory_destinations: bool,
+
+    pub unknown: bool,
 }
 
 impl PluginChoice {
@@ -22,6 +24,7 @@ impl PluginChoice {
             allow_prerelease: false,
             copy_zero_matches_to_game_folder: false,
             search_directory_destinations: false,
+            unknown: false,
         }
     }
 
@@ -32,14 +35,18 @@ impl PluginChoice {
         let Some(assignment) = assignment else {
             return Self::new(plugins);
         };
-        let selected = plugins.iter().position(|candidate| {
-            candidate.revision.plugin_id == assignment.plugin_id
-                && candidate.revision.plugin_version == assignment.revision.version
-                && candidate
-                    .revision
-                    .package_sha256
-                    .eq_ignore_ascii_case(&assignment.revision.sha256)
-        });
+        let selected = if assignment.files_unknown {
+            None
+        } else {
+            plugins.iter().position(|candidate| {
+                candidate.revision.plugin_id == assignment.plugin_id
+                    && candidate.revision.plugin_version == assignment.revision.version
+                    && candidate
+                        .revision
+                        .package_sha256
+                        .eq_ignore_ascii_case(&assignment.revision.sha256)
+            })
+        };
         Self {
             plugins,
             selected,
@@ -47,6 +54,7 @@ impl PluginChoice {
             allow_prerelease: assignment.allow_prerelease,
             copy_zero_matches_to_game_folder: assignment.copy_zero_matches_to_game_folder,
             search_directory_destinations: assignment.search_directory_destinations,
+            unknown: assignment.files_unknown,
         }
     }
 

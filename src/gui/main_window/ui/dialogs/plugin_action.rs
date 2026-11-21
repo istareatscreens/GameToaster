@@ -337,52 +337,65 @@ fn show_external_grants(ui: &mut egui::Ui, draft: &mut PluginActionDraft) {
     }
 }
 
+fn modification_hashes(modification: &crate::plugin::deployment::UserModification) -> String {
+    let current_hash = modification
+        .current_sha256
+        .as_deref()
+        .map(short_hash)
+        .map(str::to_owned)
+        .unwrap_or_else(|| t!("plugins.plan.missing").to_string());
+    t!(
+        "plugins.plan.hashes",
+        deployed => short_hash(&modification.last_deployed_sha256),
+        current => current_hash
+    )
+    .to_string()
+}
+
 fn show_modifications(ui: &mut egui::Ui, draft: &mut PluginActionDraft) {
-    if draft.preview.modifications.is_empty() {
+    let (replaced, given_up): (Vec<_>, Vec<_>) = draft
+        .preview
+        .modifications
+        .iter()
+        .cloned()
+        .partition(|modification| modification.purpose == ModificationPurpose::ReplaceWithPlugin);
+    if !replaced.is_empty() {
+        ui.add_space(10.0);
+        ui.label(text::warning(t!("plugins.plan.replaced_warning")));
+        for modification in &replaced {
+            let key = crate::plugin::deployment::decision_key(&modification.destination);
+            draft.approval.modification_decisions.remove(&key);
+            components::card(ui, |ui| {
+                ui.label(text::path(modification.destination.display().to_string()));
+                ui.label(text::hint(modification_hashes(modification)));
+                ui.label(t!("plugins.plan.replaced_with_backup").to_string());
+            });
+            ui.add_space(5.0);
+        }
+    }
+    if given_up.is_empty() {
         return;
     }
     ui.add_space(10.0);
     ui.label(text::warning(t!("plugins.plan.modified_warning")));
-    for modification in &draft.preview.modifications {
+    for modification in &given_up {
         let key = crate::plugin::deployment::decision_key(&modification.destination);
         let mut selected = draft.approval.modification_decisions.get(&key).copied();
         components::card(ui, |ui| {
             ui.label(text::path(modification.destination.display().to_string()));
-            let current_hash = modification
-                .current_sha256
-                .as_deref()
-                .map(short_hash)
-                .map(str::to_owned)
-                .unwrap_or_else(|| t!("plugins.plan.missing").to_string());
-            ui.label(text::hint(t!(
-                "plugins.plan.hashes",
-                deployed => short_hash(&modification.last_deployed_sha256),
-                current => current_hash
-            )));
+            ui.label(text::hint(modification_hashes(modification)));
             components::radio(
                 ui,
                 &mut selected,
                 Some(ModificationDecision::KeepCurrent),
                 t!("plugins.plan.keep_current").to_string(),
             );
-            match modification.purpose {
-                ModificationPurpose::ReplaceWithPlugin => {
-                    components::radio(
-                        ui,
-                        &mut selected,
-                        Some(ModificationDecision::BackupAndOverwrite),
-                        t!("plugins.plan.backup_and_overwrite").to_string(),
-                    );
-                }
-                ModificationPurpose::RestoreOriginal => {
-                    components::radio(
-                        ui,
-                        &mut selected,
-                        Some(ModificationDecision::RestoreOriginal),
-                        t!("plugins.plan.preserve_restore").to_string(),
-                    );
-                }
-            }
+            components::radio(
+                ui,
+                &mut selected,
+                Some(ModificationDecision::RestoreOriginal),
+                t!("plugins.plan.preserve_restore").to_string(),
+            );
         });
         match selected {
             Some(decision) => {

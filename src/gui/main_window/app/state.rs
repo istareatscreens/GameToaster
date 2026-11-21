@@ -265,6 +265,9 @@ impl LauncherApp {
     }
 
     pub(super) fn show_centered(&mut self, context: &egui::Context) {
+        if let Some(window) = self.system_start_window.take() {
+            crate::launcher_gui::platform::taskbar::show_next_with_taskbar_button(window);
+        }
         context.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         context.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
         context.send_viewport_cmd(egui::ViewportCommand::Focus);

@@ -1,6 +1,7 @@
 pub mod install_scripts;
 
 mod activity;
+mod folder_patch;
 mod policy;
 mod watch;
 
@@ -9,16 +10,19 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub use activity::*;
+pub use folder_patch::FolderPatch;
 pub use policy::*;
 
 use super::catalog::inventory::sha256_file;
 use super::catalog::{Catalog, CatalogRevision};
 use super::deployment::{
-    is_operator_owned, AssignmentLedger, AssignmentState, DeploymentEngine, FailureInjection,
-    TransactionState,
+    decision_key, is_operator_owned, AssignmentLedger, AssignmentState, DeploymentEngine,
+    FailureInjection, ModificationDecision, TransactionState,
 };
 use super::manifest::{normalize_package_path, Manifest, Runtime};
-use super::paths::{build_plan, revalidate_plan, DirectoryFallbackChoice, ZeroMatchChoice};
+use super::paths::{
+    build_plan, revalidate_plan, DirectoryFallbackChoice, PlannedFile, ZeroMatchChoice,
+};
 use crate::support::paths::paths_equal;
 use watch::WatchControl;
 
@@ -117,21 +121,56 @@ impl LifecycleService {
                 revision.plugin_id, revision.plugin_version
             ));
         }
-        let current = existing
-            .as_ref()
-            .and_then(|ledger| fully_current(ledger, &plan, self.deployment.path_policy()));
-        let (ledger, kept_files, changed) = match (existing, current) {
-            (Some(ledger), Some(kept_files)) => (ledger, kept_files, false),
+
+        let found: Vec<(&PlannedFile, Option<String>)> = plan
+            .files
+            .iter()
+            .filter(|planned| !is_operator_owned(planned.kind))
+            .map(|planned| (planned, sha256_file(&planned.destination).ok()))
+            .collect();
+        let folder = folder_patch::classify(
+            found
+                .iter()
+                .map(|(planned, current)| (current.as_deref(), planned.source_sha256.as_str())),
+            || self.catalog.plugin_file_hashes(&request.plugin_id),
+        );
+        let files_unknown = folder == FolderPatch::Unknown;
+        let kept_files: Vec<PathBuf> = if files_unknown {
+            found
+                .iter()
+                .filter(|(planned, current)| {
+                    current.as_deref().is_some_and(|current| {
+                        !current.eq_ignore_ascii_case(&planned.source_sha256)
+                    })
+                })
+                .map(|(planned, _)| planned.destination.clone())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let current = existing.as_ref().is_some_and(|ledger| {
+            ledger_follows_plan(ledger, &plan, self.deployment.path_policy())
+                && found.iter().all(|(planned, current)| {
+                    current.as_deref().is_some_and(|current| {
+                        files_unknown || current.eq_ignore_ascii_case(&planned.source_sha256)
+                    })
+                })
+        });
+        let (ledger, changed) = match (existing, current) {
+            (Some(ledger), true) => (ledger, false),
             _ => {
+                let mut decisions = request.modification_decisions.clone();
+                for destination in &kept_files {
+                    decisions.insert(decision_key(destination), ModificationDecision::KeepCurrent);
+                }
                 let ledger = self.deployment.deploy(
                     &request.assignment_id,
                     &revision.plugin_version.to_string(),
                     &plan,
-                    &request.modification_decisions,
+                    &decisions,
                     FailureInjection::default(),
                 )?;
-                let kept_files = ledger.kept_by_operator();
-                (ledger, kept_files, true)
+                (ledger, true)
             }
         };
         let ledger_reference = self
@@ -147,6 +186,7 @@ impl LifecycleService {
             ledger_reference,
             changed,
             kept_files,
+            files_unknown,
         };
         let activity = work.reserve_game()?;
         Ok(PreparedLaunch {
@@ -229,11 +269,11 @@ fn resolve_runtime(
     }))
 }
 
-fn fully_current(
+fn ledger_follows_plan(
     ledger: &AssignmentLedger,
     plan: &super::paths::DeploymentPlan,
     policy: &super::paths::PathPolicy,
-) -> Option<Vec<PathBuf>> {
+) -> bool {
     if ledger.validate().is_err()
         || ledger.state != AssignmentState::Active
         || ledger.plugin_id != plan.plugin_id
@@ -252,33 +292,19 @@ fn fully_current(
         })
         || revalidate_plan(plan, policy).is_err()
     {
-        return None;
+        return false;
     }
-    let mut kept = Vec::new();
-    for planned in &plan.files {
-        let managed = ledger
+    plan.files.iter().all(|planned| {
+        ledger
             .files
             .iter()
-            .find(|managed| paths_equal(&managed.destination, &planned.destination))?;
-        if managed.source_relative != planned.source_relative
-            || managed.add_to_config_menu != planned.add_to_config_menu
-        {
-            return None;
-        }
-        if is_operator_owned(managed.kind) {
-            if !managed.destination.is_file() {
-                return None;
-            }
-            continue;
-        }
-        let current = sha256_file(&managed.destination).ok();
-        if ledger.keeps_instead_of_writing(planned, current.as_deref()) {
-            kept.push(planned.destination.clone());
-        } else if current.as_deref() != Some(planned.source_sha256.as_str()) {
-            return None;
-        }
-    }
-    Some(kept)
+            .find(|managed| paths_equal(&managed.destination, &planned.destination))
+            .is_some_and(|managed| {
+                managed.source_relative == planned.source_relative
+                    && managed.add_to_config_menu == planned.add_to_config_menu
+                    && (!is_operator_owned(managed.kind) || managed.destination.is_file())
+            })
+    })
 }
 
 #[cfg(test)]

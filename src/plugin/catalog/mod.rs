@@ -3,6 +3,7 @@ pub mod inventory;
 pub mod library;
 pub mod watcher;
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -258,6 +259,36 @@ impl Catalog {
             .ok_or_else(|| {
                 format!("pinned plugin version is unavailable: {plugin_id} {version} {sha256}")
             })
+    }
+
+    pub fn plugin_file_hashes(&self, plugin_id: &str) -> BTreeSet<String> {
+        let mut hashes = BTreeSet::new();
+        let Ok(versions) = child_directories(&self.root.join(encode_plugin_id(plugin_id))) else {
+            return hashes;
+        };
+        for version in versions {
+            let Ok(digests) = child_directories(&version) else {
+                continue;
+            };
+            for digest in digests {
+                let Ok(raw) = fs::read_to_string(digest.join("catalog.toml")) else {
+                    continue;
+                };
+                let Ok(metadata) = toml::from_str::<CatalogMetadata>(&raw) else {
+                    continue;
+                };
+                if metadata.catalog_version != 1 || metadata.plugin_id != plugin_id {
+                    continue;
+                }
+                hashes.extend(
+                    metadata
+                        .inventory
+                        .into_iter()
+                        .map(|entry| entry.sha256.to_ascii_lowercase()),
+                );
+            }
+        }
+        hashes
     }
 
     pub fn quarantine(&self, revision: &Path, reason: &str) -> Result<PathBuf, String> {

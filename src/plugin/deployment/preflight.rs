@@ -35,7 +35,7 @@ impl DeploymentEngine {
                 continue;
             };
             let current_sha256 = hash_optional(&prior.destination)?;
-            if ledger.keeps_instead_of_writing(planned, current_sha256.as_deref()) {
+            if ledger.holds_operator_change(planned, current_sha256.as_deref()) {
                 modifications.push(modification(
                     prior,
                     ModificationPurpose::ReplaceWithPlugin,

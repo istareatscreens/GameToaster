@@ -36,3 +36,8 @@ Run `buid.bat` you can find the executables in the build_output
 # Support
 
 Please consider viewing my other applications or donating at [isas.dev](https://isas.dev)
+
+# Credits
+
+- Thanks to Azunyan for testing
+

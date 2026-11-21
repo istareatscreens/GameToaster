@@ -84,9 +84,11 @@ pub(super) fn set_enabled(enabled: bool) -> Result<(), String> {
 }
 
 pub(super) fn launched_at_sign_in() -> bool {
-    AppInstance::GetActivatedEventArgs()
-        .and_then(|arguments| arguments.Kind())
-        .is_ok_and(|kind| kind == ActivationKind::StartupTask)
+    started_by_task(AppInstance::GetActivatedEventArgs().and_then(|arguments| arguments.Kind()))
+}
+
+fn started_by_task(kind: windows::core::Result<ActivationKind>) -> bool {
+    kind.is_ok_and(|kind| kind == ActivationKind::StartupTask)
 }
 
 #[cfg(test)]

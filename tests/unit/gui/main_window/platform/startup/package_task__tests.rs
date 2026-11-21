@@ -53,3 +53,13 @@ fn the_task_id_matches_the_package_manifest() {
         "the manifest must declare the startup task {TASK_ID}"
     );
 }
+
+#[test]
+fn only_a_startup_task_activation_is_a_system_start() {
+    assert!(started_by_task(Ok(ActivationKind::StartupTask)));
+    assert!(!started_by_task(Ok(ActivationKind::Launch)));
+    assert!(!started_by_task(Ok(ActivationKind::File)));
+    assert!(!started_by_task(Err(windows::core::Error::from(
+        windows::Win32::Foundation::E_FAIL
+    ))));
+}

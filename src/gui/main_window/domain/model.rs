@@ -237,6 +237,8 @@ pub struct PluginAssignment {
     pub resolved_watch_target: Option<PathBuf>,
     pub grants: Vec<ExternalGrant>,
     pub ledger_reference: PathBuf,
+
+    pub files_unknown: bool,
 }
 
 impl PluginAssignment {

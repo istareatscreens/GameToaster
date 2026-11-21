@@ -50,7 +50,25 @@ impl eframe::App for LauncherApp {
         theme::CANVAS.to_normalized_gamma_f32()
     }
 
-    fn logic(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, context: &egui::Context, frame: &mut eframe::Frame) {
+        if self.system_start_hide_frames > 0 {
+            if self.system_start_hide_frames == super::SYSTEM_START_HIDE_FRAMES
+                && !self.main_visible
+            {
+                if let Some(window) = crate::launcher_gui::platform::taskbar::window_of(frame) {
+                    if crate::launcher_gui::platform::taskbar::show_next_without_taskbar_button(
+                        window,
+                    ) {
+                        self.system_start_window = Some(window);
+                    }
+                }
+            }
+            self.system_start_hide_frames -= 1;
+            if !self.main_visible {
+                context.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            }
+        }
+
         while let Ok(result) = self.worker.receiver.try_recv() {
             self.handle_worker_result(context, result);
         }
@@ -79,14 +97,13 @@ impl eframe::App for LauncherApp {
                     self.open_controller();
                 }
                 super::startup_screen::StartupScreenAction::ArmMonitorReturn
-                | super::startup_screen::StartupScreenAction::RevealMonitorMissing => {
+                | super::startup_screen::StartupScreenAction::ReportMonitorMissing => {
                     let armed = action
                         == super::startup_screen::StartupScreenAction::ArmMonitorReturn
                         && self
                             .controller
                             .arm_monitor_return(&self.config.settings.controller_screen);
                     if !armed {
-                        self.show_centered(context);
                         self.dialog = Some(Dialog::error(
                             t!("controller.startup.adapter_missing_title").to_string(),
                             t!("controller.startup.adapter_missing_body").to_string(),

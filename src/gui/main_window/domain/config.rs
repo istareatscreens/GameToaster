@@ -231,6 +231,7 @@ fn parse_plugin_assignment(
         resolved_watch_target: optional("plugin_resolved_watch_target").map(PathBuf::from),
         grants: numbered.into_iter().map(|(_, grant)| grant).collect(),
         ledger_reference: PathBuf::from(required("plugin_ledger_reference")?),
+        files_unknown: parse_assignment_bool("plugin_files_unknown")?,
     };
     assignment
         .validate()
@@ -436,6 +437,10 @@ fn write(ini: &mut Ini, path: &Path, config: &LauncherConfig) -> Result<(), Stri
                 "plugin_ledger_reference",
                 Some(&plugin.ledger_reference.to_string_lossy()),
             );
+
+            if plugin.files_unknown {
+                ini.setstr(&section, "plugin_files_unknown", Some("true"));
+            }
             for (index, grant) in plugin.grants.iter().enumerate() {
                 let value = serde_json::to_string(grant).map_err(|error| {
                     format!("failed to serialize plugin grant in [{section}]: {error}")

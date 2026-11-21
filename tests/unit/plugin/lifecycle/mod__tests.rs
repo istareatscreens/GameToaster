@@ -551,6 +551,11 @@ fn changed_files_request(fixture: &Fixture) -> ReconcileRequest {
     }
 }
 
+fn sorted(mut paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    paths.sort();
+    paths
+}
+
 fn names_in(folder: &Path) -> Vec<String> {
     let mut names: Vec<String> = fs::read_dir(folder)
         .unwrap()
@@ -578,6 +583,7 @@ fn a_launch_with_a_changed_plugin_file_deploys_nothing_and_records_no_transactio
     let ledger_path = installed.reconciliation.ledger_reference.clone();
     assert!(installed.reconciliation.changed);
     assert!(installed.reconciliation.kept_files.is_empty());
+    assert!(!installed.reconciliation.files_unknown);
     installed.finish();
 
     fs::write(&payload, b"operator-build").unwrap();
@@ -596,6 +602,10 @@ fn a_launch_with_a_changed_plugin_file_deploys_nothing_and_records_no_transactio
         assert_eq!(
             prepared.reconciliation.kept_files,
             std::slice::from_ref(&payload)
+        );
+        assert!(
+            prepared.reconciliation.files_unknown,
+            "launch attempt {attempt}: a file of no added version makes the patch unknown"
         );
         prepared.finish();
         assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
@@ -651,7 +661,7 @@ fn a_launch_with_a_missing_plugin_file_writes_it_back() {
 }
 
 #[test]
-fn a_launch_with_an_update_due_updates_the_other_files_and_keeps_the_changed_one() {
+fn an_unknown_patch_is_left_whole_through_an_update_and_a_missing_file_is_written_back() {
     let fixture = fixture();
     import_files(
         &fixture.catalog,
@@ -674,6 +684,7 @@ fn a_launch_with_an_update_due_updates_the_other_files_and_keeps_the_changed_one
         "2.0.0",
         &[("moved/payload.bin", b"two"), ("extra.bin", b"extra-two")],
     );
+    let both = sorted(vec![extra.clone(), payload.clone()]);
     let updated = fixture
         .service
         .reconcile_for_launch(changed_files_request(&fixture))
@@ -682,14 +693,19 @@ fn a_launch_with_an_update_due_updates_the_other_files_and_keeps_the_changed_one
         updated.reconciliation.revision.plugin_version,
         Version::parse("2.0.0").unwrap()
     );
-    assert!(updated.reconciliation.changed);
-    assert_eq!(
-        updated.reconciliation.kept_files,
-        std::slice::from_ref(&payload)
+    assert!(updated.reconciliation.files_unknown);
+    assert!(
+        updated.reconciliation.changed,
+        "the ledger follows the selected version"
     );
+    assert_eq!(sorted(updated.reconciliation.kept_files.clone()), both);
     let ledger_path = updated.reconciliation.ledger_reference.clone();
     updated.finish();
-    assert_eq!(fs::read(&extra).unwrap(), b"extra-two");
+    assert_eq!(
+        fs::read(&extra).unwrap(),
+        b"extra-one",
+        "no file of an unknown patch is written over"
+    );
     assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
 
     let ledger_before = fs::read(&ledger_path).unwrap();
@@ -702,12 +718,11 @@ fn a_launch_with_an_update_due_updates_the_other_files_and_keeps_the_changed_one
             !prepared.reconciliation.changed,
             "launch attempt {attempt} after the update deployed again"
         );
-        assert_eq!(
-            prepared.reconciliation.kept_files,
-            std::slice::from_ref(&payload)
-        );
+        assert!(prepared.reconciliation.files_unknown);
+        assert_eq!(sorted(prepared.reconciliation.kept_files.clone()), both);
         prepared.finish();
         assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+        assert_eq!(fs::read(&extra).unwrap(), b"extra-one");
         assert_eq!(fs::read(&ledger_path).unwrap(), ledger_before);
     }
 
@@ -717,6 +732,7 @@ fn a_launch_with_an_update_due_updates_the_other_files_and_keeps_the_changed_one
         .reconcile_for_launch(changed_files_request(&fixture))
         .unwrap();
     assert!(repaired.reconciliation.changed);
+    assert!(repaired.reconciliation.files_unknown);
     assert_eq!(
         repaired.reconciliation.kept_files,
         std::slice::from_ref(&payload)
@@ -731,10 +747,206 @@ fn a_launch_with_an_update_due_updates_the_other_files_and_keeps_the_changed_one
         .reconcile_for_launch(changed_files_request(&fixture))
         .unwrap();
     assert!(restored.reconciliation.changed);
+    assert!(!restored.reconciliation.files_unknown);
     assert!(restored.reconciliation.kept_files.is_empty());
     restored.finish();
     assert_eq!(fs::read(&payload).unwrap(), b"two");
     assert_eq!(fs::read(&extra).unwrap(), b"extra-two");
+}
+
+#[test]
+fn a_launch_writes_the_selected_version_over_the_files_an_update_left_behind() {
+    let fixture = fixture();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v1"),
+        "1.0.0",
+        &[("payload.bin", b"one"), ("extra.bin", b"extra-one")],
+    );
+    let payload = fixture.game_one.join("payload.bin");
+    let extra = fixture.game_one.join("extra.bin");
+    fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap()
+        .finish();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v2"),
+        "2.0.0",
+        &[("payload.bin", b"two"), ("extra.bin", b"extra-two")],
+    );
+
+    let mut as_before = changed_files_request(&fixture);
+    for destination in [&payload, &extra] {
+        as_before
+            .modification_decisions
+            .insert(decision_key(destination), ModificationDecision::KeepCurrent);
+    }
+    let left_behind = fixture.service.reconcile_for_launch(as_before).unwrap();
+    assert_eq!(left_behind.reconciliation.ledger.plugin_version, "2.0.0");
+    assert_eq!(
+        left_behind.reconciliation.ledger.kept_by_operator().len(),
+        2
+    );
+    left_behind.finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"one");
+
+    let prepared = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .expect("the launch is not refused");
+    assert!(prepared.reconciliation.changed);
+    assert!(!prepared.reconciliation.files_unknown);
+    assert!(prepared.reconciliation.kept_files.is_empty());
+    assert_eq!(
+        prepared.reconciliation.revision.plugin_version,
+        Version::parse("2.0.0").unwrap()
+    );
+    let ledger = prepared.reconciliation.ledger.clone();
+    prepared.finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"two");
+    assert_eq!(fs::read(&extra).unwrap(), b"extra-two");
+    assert!(ledger.kept_by_operator().is_empty());
+    for (destination, older) in [(&payload, &b"one"[..]), (&extra, &b"extra-one"[..])] {
+        let record = ledger
+            .files
+            .iter()
+            .find(|file| crate::support::paths::paths_equal(&file.destination, destination))
+            .unwrap();
+        let backup = record
+            .backup_chain
+            .last()
+            .expect("the file found is backed up");
+        assert_eq!(fs::read(&backup.path).unwrap(), older);
+    }
+
+    let again = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    assert!(!again.reconciliation.changed);
+    assert!(!again.reconciliation.files_unknown);
+    again.finish();
+}
+
+#[test]
+fn a_pinned_version_is_written_over_a_newer_added_versions_file() {
+    let fixture = fixture();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v1"),
+        "1.0.0",
+        &[("payload.bin", b"one")],
+    );
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v2"),
+        "2.0.0",
+        &[("payload.bin", b"two")],
+    );
+    let first = fixture
+        .catalog
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|revision| {
+            revision.plugin_id == CHANGED_PLUGIN_ID
+                && revision.plugin_version == Version::parse("1.0.0").unwrap()
+        })
+        .unwrap();
+    let pinned = || ReconcileRequest {
+        policy: RevisionPolicy::Pinned {
+            version: first.plugin_version.clone(),
+            sha256: first.package_sha256.clone(),
+        },
+        ..changed_files_request(&fixture)
+    };
+    let payload = fixture.game_one.join("payload.bin");
+    fixture
+        .service
+        .reconcile_for_launch(pinned())
+        .unwrap()
+        .finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"one");
+
+    fs::write(&payload, b"two").unwrap();
+    let prepared = fixture.service.reconcile_for_launch(pinned()).unwrap();
+    assert!(prepared.reconciliation.changed);
+    assert!(!prepared.reconciliation.files_unknown);
+    prepared.finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"one");
+}
+
+#[test]
+fn a_first_launch_leaves_an_unknown_patch_alone_and_a_removal_leaves_it_too() {
+    let fixture = fixture();
+    import_files(
+        &fixture.catalog,
+        &fixture.source_root.with_file_name("source-changed-v1"),
+        "1.0.0",
+        &[("payload.bin", b"one"), ("extra.bin", b"extra-one")],
+    );
+    let payload = fixture.game_one.join("payload.bin");
+    let extra = fixture.game_one.join("extra.bin");
+    fs::write(&payload, b"operator-build").unwrap();
+
+    let first = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .expect("the first launch is not refused");
+    assert!(first.reconciliation.changed);
+    assert!(first.reconciliation.files_unknown);
+    assert_eq!(
+        first.reconciliation.kept_files,
+        std::slice::from_ref(&payload)
+    );
+    let ledger = first.reconciliation.ledger.clone();
+    first.finish();
+    assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
+    assert_eq!(fs::read(&extra).unwrap(), b"extra-one");
+    let record = ledger
+        .files
+        .iter()
+        .find(|file| crate::support::paths::paths_equal(&file.destination, &payload))
+        .unwrap();
+    assert!(record.user_kept_current);
+    let own = sha256_file(
+        &fixture
+            .source_root
+            .with_file_name("source-changed-v1")
+            .join("payload.bin"),
+    )
+    .unwrap();
+    assert_eq!(
+        record.last_deployed_sha256, own,
+        "the record names the plugin's own bytes, not the operator's"
+    );
+
+    let again = fixture
+        .service
+        .reconcile_for_launch(changed_files_request(&fixture))
+        .unwrap();
+    assert!(!again.reconciliation.changed);
+    assert!(again.reconciliation.files_unknown);
+    again.finish();
+
+    fixture
+        .service
+        .deployment
+        .remove(
+            1,
+            &"d".repeat(32),
+            &BTreeMap::new(),
+            || Ok(()),
+            FailureInjection::default(),
+        )
+        .unwrap();
+    assert_eq!(
+        fs::read(&payload).unwrap(),
+        b"operator-build",
+        "a removal leaves the operator's file where it is"
+    );
 }
 
 #[test]
@@ -767,6 +979,7 @@ fn a_kept_file_that_holds_the_plugins_own_bytes_again_is_updated_by_the_next_ver
         updated.reconciliation.kept_files,
         std::slice::from_ref(&payload)
     );
+    assert!(updated.reconciliation.files_unknown);
     updated.finish();
     assert_eq!(fs::read(&payload).unwrap(), b"operator-build");
 
@@ -777,6 +990,7 @@ fn a_kept_file_that_holds_the_plugins_own_bytes_again_is_updated_by_the_next_ver
         .unwrap();
     assert!(!current.reconciliation.changed);
     assert!(current.reconciliation.kept_files.is_empty());
+    assert!(!current.reconciliation.files_unknown);
     current.finish();
 
     import_files(

@@ -278,8 +278,14 @@ fn script_setting(
 
 fn show_plugin_settings(ui: &mut egui::Ui, draft: &mut GameSettingsDraft, event: &mut DialogEvent) {
     ui.label(RichText::new(t!("plugins.assignment").to_string()).strong());
+
+    let no_version = if draft.plugin_choice.unknown {
+        t!("plugins.unknown_version")
+    } else {
+        t!("plugins.none")
+    };
     components::Combo::new("game-settings-plugin", &mut draft.plugin_choice.selected)
-        .choice(None, t!("plugins.none"))
+        .choice(None, no_version.clone())
         .choices(
             draft
                 .plugin_choice
@@ -288,19 +294,30 @@ fn show_plugin_settings(ui: &mut egui::Ui, draft: &mut GameSettingsDraft, event:
                 .enumerate()
                 .map(|(index, plugin)| (Some(index), plugin_labels::plugin_choice_label(plugin))),
         )
-        .placeholder(t!("plugins.none"))
+        .placeholder(no_version)
         .full_width()
         .show(ui);
     if let Some(assignment) = &draft.plugin {
-        ui.monospace(
-            t!(
-                "plugins.installed",
-                id => assignment.plugin_id.as_str(),
-                version => assignment.revision.version.to_string(),
-                sha => assignment.revision.sha256.chars().take(12).collect::<String>()
-            )
-            .to_string(),
-        );
+        if assignment.files_unknown {
+            ui.monospace(
+                t!(
+                    "plugins.installed_unknown",
+                    id => assignment.plugin_id.as_str()
+                )
+                .to_string(),
+            );
+            ui.label(text::hint(t!("plugins.unknown_hint")));
+        } else {
+            ui.monospace(
+                t!(
+                    "plugins.installed",
+                    id => assignment.plugin_id.as_str(),
+                    version => assignment.revision.version.to_string(),
+                    sha => assignment.revision.sha256.chars().take(12).collect::<String>()
+                )
+                .to_string(),
+            );
+        }
         if let Some(path) = &assignment.resolved_launcher {
             ui.label(
                 text::path(t!("plugins.launcher", path => path.display().to_string())).small(),
